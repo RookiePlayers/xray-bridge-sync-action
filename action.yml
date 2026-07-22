@@ -1,0 +1,34 @@
+name: 'Xray Sync'
+description: 'Run tests and sync results to Jira/Xray automatically. Supports Jest, Mocha, Pest, and Pytest.'
+author: 'RookiePlayers'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  xray_service_url:
+    description: 'URL of your deployed xray-sync-service instance'
+    required: true
+  reporter:
+    description: 'Test reporter format: jest, mocha, pest, or pytest. Overrides .xray-sync.yml if provided.'
+    required: false
+    default: ''
+  config_path:
+    description: 'Path to .xray-sync.yml config file'
+    required: false
+    default: '.xray-sync.yml'
+  working_directory:
+    description: 'Working directory for running tests (defaults to repo root)'
+    required: false
+    default: '.'
+
+outputs:
+  execution_key:
+    description: 'Jira key of the created/updated Test Execution (e.g. DTV-146)'
+  overall_status:
+    description: 'Overall test status: PASS or FAIL'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

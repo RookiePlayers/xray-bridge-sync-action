@@ -1,0 +1,62 @@
+name: Test Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Verify dist is up to date
+        run: |
+          if [ -n "$(git status --porcelain dist/)" ]; then
+            echo "::error::dist/ is out of date — run 'npm run build' and commit the result."
+            git diff dist/
+            exit 1
+          fi
+
+  self-test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write a minimal Jest fixture
+        run: |
+          mkdir -p fixture
+          cat > fixture/package.json <<'EOF'
+          { "name": "fixture", "private": true, "devDependencies": { "jest": "^29.0.0" } }
+          EOF
+          cat > fixture/sample.test.js <<'EOF'
+          // @xray_plan DTV-1
+          // @xray_folder /Smoke
+          test('adds numbers', () => {
+            expect(1 + 1).toBe(2);
+          });
+          EOF
+          cat > fixture/.xray-sync.yml <<'EOF'
+          project_key: DTV
+          fix_version: v1.0
+          reporter: jest
+          execution_mode: per_run
+          test_results_path: ./test-results.json
+          EOF
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run this action against the fixture
+        uses: ./
+        with:
+          xray_service_url: ${{ secrets.XRAY_SERVICE_URL }}
+          working_directory: fixture
