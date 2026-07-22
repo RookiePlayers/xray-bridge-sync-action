@@ -1,4 +1,4 @@
-name: 'Xray Sync'
+name: 'Xray Bridge Sync'
 description: 'Run tests and sync results to Jira/Xray automatically. Supports Jest, Mocha, Pest, and Pytest.'
 author: 'RookiePlayers'
 
