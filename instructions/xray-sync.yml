@@ -1,0 +1,34 @@
+# .xray-sync.yml
+# Place this file in the root of any repo using the xray-bridge-sync-action.
+# It tells the action how to run your tests and where to sync results in Jira/Xray.
+
+# ─── Required ─────────────────────────────────────────────────────────────────
+
+# Your Jira project key
+project_key: DTV
+
+# The Fix Version in Jira that test executions should be grouped under.
+# This version MUST already exist in your Jira project before the pipeline runs.
+# Create it at: Project Settings -> Versions -> Create version
+fix_version: v1.0
+
+# ─── Test Runner ──────────────────────────────────────────────────────────────
+
+# The test reporter format your project uses.
+# Supported values: jest | mocha | pest | pytest
+reporter: jest
+
+# ─── Optional ─────────────────────────────────────────────────────────────────
+
+# How test executions are created in Xray.
+#   per_run  — one Test Execution per pipeline run (recommended)
+#   per_file — one Test Execution per test file
+execution_mode: per_run
+
+# Path to the test results output file, relative to the repo root.
+# Must match the --outputFile / --log-junit / --junit-xml flag in your test command.
+#   Jest:   ./test-results.json   (--outputFile)
+#   Mocha:  ./test-results.json   (--reporter-options output=)
+#   Pest:   ./test-results.xml    (--log-junit)
+#   Pytest: ./test-results.xml    (--junit-xml)
+test_results_path: ./test-results.json

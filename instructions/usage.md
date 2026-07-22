@@ -44,8 +44,6 @@ fix_version: v1.0
 reporter: jest
 execution_mode: per_run
 test_results_path: ./test-results.json
-branch: main
-trigger: on_merge
 ```
 
 ### 4. Add the GitHub secret
