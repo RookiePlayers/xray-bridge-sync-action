@@ -32471,6 +32471,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
 const exec = __importStar(__nccwpck_require__(5236));
 const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
 const yaml = __importStar(__nccwpck_require__(4281));
 const tagExtractor_1 = __nccwpck_require__(5311);
 const sync_1 = __nccwpck_require__(4448);
@@ -32481,12 +32482,13 @@ async function run() {
         const inputReporter = core.getInput('reporter');
         const configPath = core.getInput('config_path') || '.xray-sync.yml';
         const workingDir = core.getInput('working_directory') || '.';
-        // ─── Read .xray-sync.yml ─────────────────────────────────────────────────
-        if (!fs.existsSync(configPath)) {
-            core.setFailed(`.xray-sync.yml not found at ${configPath}`);
+        // ─── Read .xray-sync.yml (resolved relative to working_directory) ────────
+        const resolvedConfigPath = path.resolve(workingDir, configPath);
+        if (!fs.existsSync(resolvedConfigPath)) {
+            core.setFailed(`.xray-sync.yml not found at ${resolvedConfigPath}`);
             return;
         }
-        const config = yaml.load(fs.readFileSync(configPath, 'utf-8'));
+        const config = yaml.load(fs.readFileSync(resolvedConfigPath, 'utf-8'));
         const reporter = inputReporter || config.reporter || 'jest';
         const resultsPath = config.test_results_path || './test-results.json';
         const executionMode = config.execution_mode || 'per_run';
