@@ -30,5 +30,5 @@ outputs:
     description: 'Overall test status: PASS or FAIL'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
