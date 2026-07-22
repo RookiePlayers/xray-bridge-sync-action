@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "xray-bridge-sync": {
+      "type": "http",
+      "url": "https://xray-sync-service-166488387568.europe-west2.run.app/mcp"
+    }
+  }
+}
