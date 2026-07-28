@@ -32629,7 +32629,7 @@ async function syncResults(xrayServiceUrl, config, rawResults, tagMap) {
     }
     const result = body.result;
     // Surface any warnings from the service (e.g. files skipped due to missing
-    // @xray_plan tags, failed Jira parent link attempts, etc.)
+    // @xray_test tags, failed Jira parent link attempts, etc.)
     if (result.warnings?.length) {
         for (const warning of result.warnings) {
             core.warning(warning);
@@ -32701,7 +32701,7 @@ const fast_xml_parser_1 = __nccwpck_require__(9741);
 // ─── Core tag reading ─────────────────────────────────────────────────────────
 /**
  * Reads the first 20 lines of a file's content and extracts any
- * @xray_plan / @xray_folder / @jira_parent comment tags.
+ * @xray_plan / @xray_test / @xray_folder / @jira_parent comment tags.
  * Supports both // and # comment styles (JS/TS, Python, PHP).
  */
 function extractTagsFromContent(content) {
@@ -32716,6 +32716,8 @@ function extractTagsFromContent(content) {
         const clean = value.trim();
         if (tag === 'xray_plan')
             tags.xrayPlan = clean;
+        if (tag === 'xray_test')
+            tags.xrayTest = clean;
         if (tag === 'xray_folder')
             tags.xrayFolder = clean;
         if (tag === 'jira_parent')

@@ -83,6 +83,7 @@ export function parseJestOutput(raw: string, tagMap: Record<string, FileTags> = 
     return {
       filePath: fileResult.name,
       xrayPlan: tags.xrayPlan,
+      xrayTest: tags.xrayTest,
       xrayFolder: tags.xrayFolder,
       jiraParent: tags.jiraParent,
       passed,

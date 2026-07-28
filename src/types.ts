@@ -6,6 +6,7 @@ export type XrayTestStatus = 'TODO' | 'EXECUTING' | 'PASS' | 'FAIL' | 'ABORTED';
 
 export interface FileTags {
   xrayPlan?: string;
+  xrayTest?: string;
   xrayFolder?: string;
   jiraParent?: string;
 }
@@ -24,6 +25,7 @@ export interface TestFailure {
 export interface NormalisedTestFile {
   filePath: string;
   xrayPlan?: string;
+  xrayTest?: string;
   xrayFolder?: string;
   jiraParent?: string;
   passed: number;

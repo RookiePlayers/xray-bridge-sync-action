@@ -33,9 +33,10 @@ describe('parseJestOutput', () => {
 
   it('merges tags from the provided tagMap by file path', () => {
     const result = parseJestOutput(raw, {
-      '/repo/src/foo.test.js': { xrayPlan: 'DTV-1', xrayFolder: '/Smoke' },
+      '/repo/src/foo.test.js': { xrayPlan: 'DTV-1', xrayTest: 'DTV-33', xrayFolder: '/Smoke' },
     });
     expect(result.files[0].xrayPlan).toBe('DTV-1');
+    expect(result.files[0].xrayTest).toBe('DTV-33');
     expect(result.files[0].xrayFolder).toBe('/Smoke');
   });
 

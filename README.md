@@ -3,10 +3,10 @@
 Automatically run your tests and sync results to Jira/Xray after every push or PR.
 Supports Jest, Mocha, Pest (PHP), and Pytest.
 
-This action runs your test suite, extracts `@xray_plan` / `@xray_folder` /
-`@jira_parent` tags from your test files, and posts the results to a
-[xray-sync-service](https://github.com/RookiePlayers/test_case_xray) instance
-you control, which creates/updates a Jira Test Execution.
+This action runs your test suite, extracts `@xray_test` / `@xray_plan` /
+`@xray_folder` / `@jira_parent` tags from your test files, and posts the
+results to a [xray-sync-service](https://github.com/RookiePlayers/test_case_xray)
+instance you control, which creates/updates a Jira Test Execution.
 
 ## Usage
 
@@ -65,11 +65,19 @@ xray-sync-service instance.
 Add these comments within the first 20 lines of a test file:
 
 ```js
-// @xray_plan DTV-33
+// @xray_test DTV-33
+// @xray_plan DTV-149
 // @xray_folder /Authentication/Login
 // @jira_parent DTV-15
 describe('Login endpoint', () => { /* ... */ })
 ```
+
+| Tag | Required | Description |
+|---|---|---|
+| `@xray_test` | **Yes** | Jira key of the Xray Test this file's run status updates. Without this tag the file is skipped — no test run gets created or updated in Xray. |
+| `@xray_plan` | No | Jira key of the Test Plan this test belongs to |
+| `@xray_folder` | No | Folder path to file the test under in the Xray repository |
+| `@jira_parent` | No | Jira issue to link this test to |
 
 Python/PHP files use `#` comments instead of `//`.
 
@@ -87,8 +95,8 @@ Python/PHP files use `#` comments instead of `//`.
 
 1. The action reads `.xray-sync.yml` and runs your test suite with the
    configured reporter, writing results to `test_results_path`.
-2. It scans the test files referenced in those results for `@xray_plan` /
-   `@xray_folder` / `@jira_parent` tags.
+2. It scans the test files referenced in those results for `@xray_test` /
+   `@xray_plan` / `@xray_folder` / `@jira_parent` tags.
 3. It posts the raw results plus the extracted tag map to
    `${xray_service_url}/xray/sync-results`.
 4. The service creates or updates a Jira Test Execution and returns the

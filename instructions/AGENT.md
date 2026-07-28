@@ -38,14 +38,24 @@ Read the feature code the user is asking you to test:
 
 ---
 
-## Step 3 — Ask the user for Xray context
+## Step 3 — Resolve fix version and Test Plan
 
-Before creating the test file, ask the user:
+Read `.xray-sync.yml` if it exists in the repo root. Extract `project_key` and `fix_version`.
 
-> "Which Jira Test Plan should these tests be linked to? (e.g. DTV-33)
-> If you're not sure, I can create a new one."
+**Fix version:**
+- If `fix_version` is present in `.xray-sync.yml`, use it without asking
+- If it is missing or `.xray-sync.yml` does not exist, ask the user:
+  > "What fix version should these tests be linked to? (e.g. v1.0)"
 
-Wait for their answer. Also check if there is a `.xray-sync.yml` in the repo root — if it exists, read `project_key` and `fix_version` from it as defaults.
+**Test Plan:**
+- Search the current conversation context for any previously mentioned Test Plan key (e.g. DTV-149)
+- If a Test Plan key is known, use it — do not ask again
+- If no Test Plan key is known, call `create_test_plan` to create one automatically:
+  - `summary`: "{project_key} {fix_version} Test Plan" (e.g. "DTV v1.0 Test Plan")
+  - `projectKey`: from `.xray-sync.yml` or ask the user
+  - `fixVersion`: resolved above
+- Log the created Test Plan key clearly so the user can reference it in future sessions:
+  > "Created Test Plan: DTV-149 — use this key in future sessions to avoid creating duplicates."
 
 ---
 
@@ -54,47 +64,68 @@ Wait for their answer. Also check if there is a `.xray-sync.yml` in the repo roo
 1. Look at the existing test directory structure to understand how tests are organised (by feature area, by module, by endpoint, by layer, etc.)
 2. Infer the correct folder for the new test based on where similar tests live
 3. If no clear pattern exists, ask the user: "Where would you like this test file to go?"
-4. This folder path is also what you will use as the `@xray_folder` tag value
+4. Check whether the corresponding Xray folder already exists — if not, call `create_folder` to create it
+5. This folder path is also what you will use as the `@xray_folder` tag value
 
 ---
 
-## Step 5 — Write the test file
+## Step 5 — Create the Xray test case FIRST, then write the test file
 
-Create the test file in the correct location. At the very top of the file, before any imports, add the Xray tags:
-
-```
-// @xray_plan <test-plan-key-from-step-3>
-// @xray_folder <folder-path-from-step-4>
-// @jira_parent <jira-issue-key-for-the-feature-being-tested>
-```
-
-For `@jira_parent`, use the Jira issue key for the feature/story this test covers if the user has mentioned it, or ask: "What is the Jira issue key for this feature? (e.g. DTV-42)"
-
-Then write the full test file, matching the conventions discovered in Step 1 exactly.
-
----
-
-## Step 6 — Create the matching Xray test case
-
-After the test file is written, use the available MCP tools to create the corresponding Xray test case in Jira:
+Unlike the other steps, the Xray test case must be created BEFORE writing the file
+so the returned issue key can be embedded as the `@xray_test` tag.
 
 1. Call `create_test` with:
-   - `summary`: a clear title describing what this test file covers
+   - `summary`: a clear title describing what this test file covers (e.g. "Payment — tax rate resolution")
    - `projectKey`: from `.xray-sync.yml` or ask the user
    - `testType`: "Manual"
-   - `steps`: one step per meaningful test case in the file, using:
-     - `action`: what the test does (e.g. "POST /auth/login with valid credentials")
+   - `steps`: one step per meaningful test case identified in Step 2, using:
+     - `action`: what the test does (e.g. "Call resolveTaxForRate with a valid rate")
      - `data`: the input being used
      - `result`: the expected outcome
 
-2. Call `add_to_test_plan` with the test plan key from Step 3 and the issueId returned from `create_test`
+2. Note the returned `issueKey` (e.g. DTV-47) — this becomes the `@xray_test` tag value
 
-3. If the folder from Step 4 doesn't already exist in Xray, call `create_folder` first, then call `add_tests_to_folder`
+3. Call `add_to_test_plan` with:
+   - `testPlanKey`: the Test Plan key from Step 3
+   - `testIssueIds`: the issueId returned from `create_test`
 
-Report back to the user with:
-- The created test file path
-- The Jira key of the new Xray test case
-- Confirmation it has been added to the test plan and folder
+4. If the Xray folder from Step 4 was just created or may not exist, call `add_tests_to_folder` with:
+   - `projectKey`: from config
+   - `path`: the folder path from Step 4
+   - `testIssueIds`: the issueId returned from `create_test`
+
+---
+
+## Step 6 — Write the test file
+
+Create the test file in the correct location. At the very top of the file, before any
+imports, add ALL FOUR Xray tags:
+
+```
+// @xray_test <issue-key-from-step-5>      ← REQUIRED — Xray Test issue key (e.g. DTV-47)
+// @xray_plan <test-plan-key-from-step-3>  ← optional — Test Plan key (e.g. DTV-149)
+// @xray_folder <folder-from-step-4>       ← optional — Xray folder path (e.g. /Auth/Login)
+// @jira_parent <feature-issue-key>        ← optional — parent Jira story (e.g. DTV-42)
+```
+
+**Critical tag semantics — never confuse these:**
+- `@xray_test` → the Xray **Test** issue key. REQUIRED. The pipeline uses this to update
+  the individual test's run status (PASS/FAIL) under the Test Execution. Without this tag
+  the file is skipped entirely — no status is ever recorded.
+- `@xray_plan` → the Xray **Test Plan** issue key. Optional. The pipeline links the
+  Test Execution to this plan so results appear under the Test Plan's "Test Executions" tab.
+- `@xray_folder` → Xray Test Repository folder path. Optional.
+- `@jira_parent` → parent Jira story/feature. Optional. A "Tests" link is created when
+  test status changes.
+
+Never use a Test Plan key as `@xray_test`. Never use a Test issue key as `@xray_plan`.
+These are different issue types in Jira — using the wrong key causes the sync to fail silently.
+
+For `@jira_parent`, use the Jira issue key for the feature/story this test covers if the
+user has mentioned it, or ask:
+> "What is the Jira issue key for this feature? (e.g. DTV-42)"
+
+Then write the full test file body, matching the conventions discovered in Step 1 exactly.
 
 ---
 
@@ -102,14 +133,21 @@ Report back to the user with:
 
 ```
 Test file created: <path>
-Xray test case:   <jira-key>
-Test plan:        <test-plan-key>
-Folder:           <folder-path>
+
+Tags applied:
+  @xray_test    <test-issue-key>   ← drives individual test status updates
+  @xray_plan    <test-plan-key>    ← links Test Execution to this plan
+  @xray_folder  <folder-path>
+  @jira_parent  <feature-key>
+
+Xray test case: <test-issue-key> added to Test Plan <test-plan-key>
 
 Next steps:
 1. Review the generated test file and adjust if needed
-2. Push to your branch — the pipeline will run the tests automatically
-3. Results will sync to Jira under the Test Execution for <fix_version>
+2. Push to your branch — the pipeline runs tests automatically
+3. Results sync to Jira:
+   - Individual status appears under <test-issue-key>
+   - Test Execution appears under <test-plan-key>'s "Test Executions" tab
 ```
 
 ---
@@ -118,8 +156,17 @@ Next steps:
 
 - Never skip Step 1 — always read existing tests before writing new ones
 - Never hardcode a testing framework — detect it from the project
-- Never create an Xray test case before the test file is written and reviewed
-- If the MCP tools are not available, write the test file anyway and tell the user
-  to manually create the Xray test case after connecting their account at /connect/xray
+- Never write the test file without @xray_test — always create the Xray test case first
+  so the real issue key is available to embed in the file header
+- Never confuse @xray_test (Test issue key) with @xray_plan (Test Plan key)
+- Never create a duplicate Test Plan — check whether one was already mentioned in
+  this session first
+- Never ask for fix_version if it is already in `.xray-sync.yml`
+- If the MCP tools are not available, write the test file with placeholder tags and
+  tell the user to:
+  1. Connect the Xray MCP connector at https://xray-sync-service-166488387568.europe-west2.run.app/account
+  2. Then ask Claude Code to run Steps 5–6 again to create the Xray test case and
+     replace the placeholder tags with real issue keys
 - If the user says "just write the tests" without Xray context, write the file first
-  and ask for Xray details afterward — never block test generation on Xray setup
+  with placeholder tags and handle Xray setup afterward — never block test generation
+  on Xray setup

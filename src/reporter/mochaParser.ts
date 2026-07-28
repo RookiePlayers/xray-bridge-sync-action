@@ -110,6 +110,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
     return {
       filePath,
       xrayPlan: tags.xrayPlan,
+      xrayTest: tags.xrayTest,
       xrayFolder: tags.xrayFolder,
       jiraParent: tags.jiraParent,
       passed,

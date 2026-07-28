@@ -78,7 +78,7 @@ export async function syncResults(
   const result: SyncResult = body.result;
 
   // Surface any warnings from the service (e.g. files skipped due to missing
-  // @xray_plan tags, failed Jira parent link attempts, etc.)
+  // @xray_test tags, failed Jira parent link attempts, etc.)
   if (result.warnings?.length) {
     for (const warning of result.warnings) {
       core.warning(warning);

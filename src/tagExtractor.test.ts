@@ -14,18 +14,25 @@ describe('extractTags', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('reads @xray_plan/@xray_folder/@jira_parent tags from Jest test files', () => {
+  it('reads @xray_plan/@xray_test/@xray_folder/@jira_parent tags from Jest test files', () => {
     const testFile = path.join(dir, 'login.test.js');
     fs.writeFileSync(
       testFile,
-      ['// @xray_plan DTV-33', '// @xray_folder /Authentication/Login', '// @jira_parent DTV-15', "test('x', () => {})"].join('\n')
+      [
+        '// @xray_plan DTV-149',
+        '// @xray_test DTV-33',
+        '// @xray_folder /Authentication/Login',
+        '// @jira_parent DTV-15',
+        "test('x', () => {})",
+      ].join('\n')
     );
 
     const raw = JSON.stringify({ testResults: [{ name: testFile }] });
     const tagMap = extractTags(raw, 'jest');
 
     expect(tagMap[testFile]).toEqual({
-      xrayPlan: 'DTV-33',
+      xrayPlan: 'DTV-149',
+      xrayTest: 'DTV-33',
       xrayFolder: '/Authentication/Login',
       jiraParent: 'DTV-15',
     });

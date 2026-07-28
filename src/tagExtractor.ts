@@ -5,6 +5,7 @@ import { XMLParser } from 'fast-xml-parser';
 
 export interface FileTags {
   xrayPlan?: string;
+  xrayTest?: string;
   xrayFolder?: string;
   jiraParent?: string;
 }
@@ -15,7 +16,7 @@ export type TagMap = Record<string, FileTags>;
 
 /**
  * Reads the first 20 lines of a file's content and extracts any
- * @xray_plan / @xray_folder / @jira_parent comment tags.
+ * @xray_plan / @xray_test / @xray_folder / @jira_parent comment tags.
  * Supports both // and # comment styles (JS/TS, Python, PHP).
  */
 export function extractTagsFromContent(content: string): FileTags {
@@ -31,6 +32,7 @@ export function extractTagsFromContent(content: string): FileTags {
     const clean = value.trim();
 
     if (tag === 'xray_plan') tags.xrayPlan = clean;
+    if (tag === 'xray_test') tags.xrayTest = clean;
     if (tag === 'xray_folder') tags.xrayFolder = clean;
     if (tag === 'jira_parent') tags.jiraParent = clean;
   }
