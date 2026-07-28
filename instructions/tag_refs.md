@@ -11,7 +11,7 @@ above each `it()`/`test()` block (per-block mode) — see below.
 
 | Tag | Required | Value | Purpose |
 |---|---|---|---|
-| `@xray_test` | **Yes** | Xray Test issue key (e.g. `DTV-47`) | Drives individual test run status updates (PASS/FAIL) under the Test Execution |
+| `@xray_test` | **Yes** | Xray Test issue key (e.g. `DTV-47`) | Drives individual test run status updates (PASSED/FAILED) under the Test Execution |
 | `@xray_plan` | No | Test Plan issue key (e.g. `DTV-149`) | Links the Test Execution to this Test Plan so results appear under its "Test Executions" tab |
 | `@xray_folder` | No | Folder path (e.g. `/Auth/Login`) | Places the test in the correct Xray Test Repository folder |
 | `@jira_parent` | No | Jira story/feature key (e.g. `DTV-42`) | Creates a "Tests" issue link on the parent story when test status changes |
@@ -69,7 +69,7 @@ case. Use whole-file mode only when the entire file really is one Test.
 
 **`@xray_test` (required)**
 The pipeline finds the Xray Test issue with this key and updates its run status
-(PASS or FAIL) under the Test Execution created for this pipeline run.
+(PASSED or FAILED) under the Test Execution created for this pipeline run.
 Without this tag the file is skipped entirely — no status is recorded.
 
 **`@xray_plan` (optional)**
@@ -84,7 +84,7 @@ correct folder in the Xray Test Repository. Has no effect on the pipeline sync
 itself — the folder placement is done at test case creation time, not at runtime.
 
 **`@jira_parent` (optional)**
-When the test status changes (e.g. first run, or PASS → FAIL), the pipeline
+When the test status changes (e.g. first run, or PASSED → FAILED), the pipeline
 creates a "Tests" Jira issue link between this test and the parent story.
 Only fires on status change, not on every run, to avoid noise.
 

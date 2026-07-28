@@ -113,7 +113,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
           failed,
           skipped: outcome === 'pending' ? 1 : 0,
           duration: match.duration ?? 0,
-          status: failed > 0 ? 'FAIL' : 'PASS',
+          status: failed > 0 ? 'FAILED' : 'PASSED',
           failures:
             outcome === 'failed'
               ? [{ testName: match.fullTitle, message: (match.err?.message ?? '').split('\n')[0] }]
@@ -151,7 +151,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
       }
     }
 
-    const status: XrayTestStatus = failed > 0 ? 'FAIL' : 'PASS';
+    const status: XrayTestStatus = failed > 0 ? 'FAILED' : 'PASSED';
 
     return [{
       filePath,
@@ -168,7 +168,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
     }];
   });
 
-  const overallStatus: XrayTestStatus = output.stats.failures > 0 ? 'FAIL' : 'PASS';
+  const overallStatus: XrayTestStatus = output.stats.failures > 0 ? 'FAILED' : 'PASSED';
 
   return {
     runAt: new Date(output.stats.start).toISOString(),

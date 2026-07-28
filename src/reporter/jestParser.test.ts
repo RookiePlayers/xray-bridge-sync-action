@@ -22,7 +22,7 @@ describe('parseJestOutput', () => {
 
   it('normalises passed/failed counts and overall status', () => {
     const result = parseJestOutput(raw);
-    expect(result.overallStatus).toBe('FAIL');
+    expect(result.overallStatus).toBe('FAILED');
     expect(result.totalPassed).toBe(1);
     expect(result.totalFailed).toBe(1);
     expect(result.files).toHaveLength(1);
@@ -83,14 +83,14 @@ describe('parseJestOutput', () => {
         testTitle: 'aggregates totals',
         passed: 1,
         failed: 0,
-        status: 'PASS',
+        status: 'PASSED',
       });
       expect(result.files[1]).toMatchObject({
         xrayTest: 'DTV-151',
         testTitle: 'requests the correct property',
         passed: 0,
         failed: 1,
-        status: 'FAIL',
+        status: 'FAILED',
       });
       expect(result.files[1].failures[0].expected).toBe('401');
       expect(result.parseWarnings).toEqual([]);

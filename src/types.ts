@@ -1,6 +1,8 @@
 // ─── Xray Test Run Statuses ───────────────────────────────────────────────────
 
-export type XrayTestStatus = 'TODO' | 'EXECUTING' | 'PASS' | 'FAIL' | 'ABORTED';
+// Must match Xray Cloud's built-in Test Run status names exactly, since the
+// service's updateTestRunStatus mutation rejects anything else.
+export type XrayTestStatus = 'TODO' | 'EXECUTING' | 'PASSED' | 'FAILED' | 'ABORTED';
 
 // ─── Tag extraction ───────────────────────────────────────────────────────────
 

@@ -58,7 +58,7 @@ xray-sync-service instance.
 | Output | Description |
 |---|---|
 | `execution_key` | Jira key of the created/updated Test Execution |
-| `overall_status` | `PASS` or `FAIL` |
+| `overall_status` | `PASSED` or `FAILED` |
 
 ## Tagging test files
 

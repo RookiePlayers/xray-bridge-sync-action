@@ -153,7 +153,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
           failed,
           skipped: outcome === 'skipped' ? 1 : 0,
           duration: parseFloat(match.testcase['@_time'] ?? '0') * 1000,
-          status: failed > 0 ? 'FAIL' : 'PASS',
+          status: failed > 0 ? 'FAILED' : 'PASSED',
           failures: outcome === 'failed' ? [buildFailure(match.testcase)] : [],
         });
       }
@@ -191,7 +191,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
     totalFailed += failed;
     totalSkipped += skipped;
 
-    const status: XrayTestStatus = failed > 0 ? 'FAIL' : 'PASS';
+    const status: XrayTestStatus = failed > 0 ? 'FAILED' : 'PASSED';
 
     return [{
       filePath: fileKey,
@@ -208,7 +208,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
     }];
   });
 
-  const overallStatus: XrayTestStatus = totalFailed > 0 ? 'FAIL' : 'PASS';
+  const overallStatus: XrayTestStatus = totalFailed > 0 ? 'FAILED' : 'PASSED';
 
   return {
     // JUnit XML doesn't reliably carry a single run-start timestamp at the root

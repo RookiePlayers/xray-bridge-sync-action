@@ -17,7 +17,7 @@ describe('parseMochaOutput', () => {
     expect(result.files).toHaveLength(1);
     expect(result.files[0].passed).toBe(1);
     expect(result.files[0].failed).toBe(1);
-    expect(result.overallStatus).toBe('FAIL');
+    expect(result.overallStatus).toBe('FAILED');
     expect(result.parseWarnings).toEqual([]);
   });
 

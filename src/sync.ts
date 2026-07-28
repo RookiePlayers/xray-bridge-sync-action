@@ -14,7 +14,7 @@ export interface SyncConfig {
 export interface SyncResult {
   executionKey: string;
   executionId: string;
-  overallStatus: 'PASS' | 'FAIL';
+  overallStatus: 'PASSED' | 'FAILED';
   totalTests: number;
   passed: number;
   failed: number;

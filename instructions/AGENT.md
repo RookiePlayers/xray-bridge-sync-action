@@ -158,7 +158,7 @@ describe('...', () => {
 
 **Critical tag semantics — never confuse these:**
 - `@xray_test` → the Xray **Test** issue key. REQUIRED (at least one per file). The pipeline
-  uses this to update that test's run status (PASS/FAIL) under the Test Execution. A file
+  uses this to update that test's run status (PASSED/FAILED) under the Test Execution. A file
   with zero `@xray_test` tags is skipped entirely — no status is ever recorded. A block with
   no `@xray_test` tag directly above it (in per-block mode) is simply not synced.
 - `@xray_plan` → the Xray **Test Plan** issue key. Optional. The pipeline links the

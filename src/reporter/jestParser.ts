@@ -71,7 +71,7 @@ export function parseJestOutput(raw: string, tagMap: Record<string, FileTags> = 
     return [buildWholeFileEntry(fileResult, tags, assertionResults)];
   });
 
-  const overallStatus: XrayTestStatus = output.numFailedTests > 0 ? 'FAIL' : 'PASS';
+  const overallStatus: XrayTestStatus = output.numFailedTests > 0 ? 'FAILED' : 'PASSED';
 
   return {
     runAt: new Date(output.startTime).toISOString(),
@@ -99,7 +99,7 @@ function buildWholeFileEntry(
     .filter((t) => t.status === 'failed')
     .map(buildFailure);
 
-  const status: XrayTestStatus = failed > 0 ? 'FAIL' : 'PASS';
+  const status: XrayTestStatus = failed > 0 ? 'FAILED' : 'PASSED';
   const duration = fileResult.endTime - fileResult.startTime;
 
   return {
@@ -152,7 +152,7 @@ function buildBlockEntries(
       failed,
       skipped: match.status === 'pending' ? 1 : 0,
       duration: match.duration ?? 0,
-      status: failed > 0 ? 'FAIL' : 'PASS',
+      status: failed > 0 ? 'FAILED' : 'PASSED',
       failures: match.status === 'failed' ? [buildFailure(match)] : [],
     });
   }

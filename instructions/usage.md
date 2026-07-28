@@ -114,7 +114,7 @@ Push to main or develop
   → POSTs results to xray-sync-service
   → Service parses results
   → Finds or creates a Test Execution for the fixVersion
-  → Updates each test run with PASS/FAIL + failure details
+  → Updates each test run with PASSED/FAILED + failure details
   → Job summary shows Execution key and overall status
 ```
 
