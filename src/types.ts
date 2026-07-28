@@ -4,9 +4,16 @@ export type XrayTestStatus = 'TODO' | 'EXECUTING' | 'PASS' | 'FAIL' | 'ABORTED';
 
 // ─── Tag extraction ───────────────────────────────────────────────────────────
 
+/** A single @xray_test tag paired with the it()/test() title it precedes (per-block mode only). */
+export interface XrayTestTag {
+  key: string;
+  title?: string;   // undefined if no it()/test() call was found after the tag
+}
+
 export interface FileTags {
   xrayPlan?: string;
-  xrayTest?: string;
+  xrayTest?: string;          // set when the file has exactly one @xray_test tag (whole-file aggregate)
+  xrayTests?: XrayTestTag[];  // set when the file has 2+ @xray_test tags (per-block mode)
   xrayFolder?: string;
   jiraParent?: string;
 }
@@ -24,6 +31,7 @@ export interface TestFailure {
 
 export interface NormalisedTestFile {
   filePath: string;
+  testTitle?: string;   // set when this entry represents one it()/test() block, not the whole file
   xrayPlan?: string;
   xrayTest?: string;
   xrayFolder?: string;
@@ -43,4 +51,5 @@ export interface NormalisedResult {
   totalFailed: number;
   totalSkipped: number;
   overallStatus: XrayTestStatus;
+  parseWarnings: string[];
 }

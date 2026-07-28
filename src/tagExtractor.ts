@@ -1,30 +1,48 @@
 import * as fs from 'fs';
 import { XMLParser } from 'fast-xml-parser';
+import { FileTags, XrayTestTag } from './types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface FileTags {
-  xrayPlan?: string;
-  xrayTest?: string;
-  xrayFolder?: string;
-  jiraParent?: string;
-}
 
 export type TagMap = Record<string, FileTags>;
 
 // ─── Core tag reading ─────────────────────────────────────────────────────────
+//
+// @xray_plan / @xray_folder / @jira_parent apply to the whole file (last tag
+// wins if repeated). @xray_test has two modes based on how many times it
+// appears in the file:
+//   - Exactly one tag: whole-file aggregate — every it()/test() block in the
+//     file is treated as one Xray Test (the original convention).
+//   - Two or more tags: per-block mode — each tag is paired with the nearest
+//     it()/test() call that follows it, and each becomes its own independent
+//     Xray Test run. Blocks with no preceding tag are not synced.
+// This mirrors xray-sync-service's src/utils/tagExtractor.ts exactly — keep
+// both in sync if either changes.
+
+const TEST_BLOCK_RE = /^\s*(?:it|test)(?:\.only|\.skip|\.todo|\.concurrent)?\s*\(\s*(['"`])((?:\\.|(?!\1).)*)\1/;
+const MAX_LOOKAHEAD_LINES = 15;
+
+function findFollowingTestTitle(lines: string[], fromIndex: number): string | undefined {
+  const end = Math.min(lines.length, fromIndex + MAX_LOOKAHEAD_LINES);
+  for (let i = fromIndex; i < end; i++) {
+    const match = lines[i].match(TEST_BLOCK_RE);
+    if (match) return match[2];
+  }
+  return undefined;
+}
 
 /**
- * Reads the first 20 lines of a file's content and extracts any
- * @xray_plan / @xray_test / @xray_folder / @jira_parent comment tags.
- * Supports both // and # comment styles (JS/TS, Python, PHP).
+ * Extracts @xray_plan / @xray_test / @xray_folder / @jira_parent comment tags
+ * from a test file's full content. Supports both // and # comment styles
+ * (JS/TS, Python, PHP).
  */
 export function extractTagsFromContent(content: string): FileTags {
-  const lines = content.split('\n').slice(0, 20);
+  const lines = content.split('\n');
   const tags: FileTags = {};
+  const xrayTestMatches: XrayTestTag[] = [];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
     const match = trimmed.match(/^(?:\/\/|#)\s*@(\w+)\s+(.+)$/);
     if (!match) continue;
 
@@ -32,9 +50,15 @@ export function extractTagsFromContent(content: string): FileTags {
     const clean = value.trim();
 
     if (tag === 'xray_plan') tags.xrayPlan = clean;
-    if (tag === 'xray_test') tags.xrayTest = clean;
+    if (tag === 'xray_test') xrayTestMatches.push({ key: clean, title: findFollowingTestTitle(lines, i + 1) });
     if (tag === 'xray_folder') tags.xrayFolder = clean;
     if (tag === 'jira_parent') tags.jiraParent = clean;
+  }
+
+  if (xrayTestMatches.length === 1) {
+    tags.xrayTest = xrayTestMatches[0].key;
+  } else if (xrayTestMatches.length > 1) {
+    tags.xrayTests = xrayTestMatches;
   }
 
   return tags;

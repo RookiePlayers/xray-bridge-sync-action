@@ -76,8 +76,53 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
     fileGroups.set(test.file, existing);
   }
 
-  const files: NormalisedTestFile[] = Array.from(fileGroups.entries()).map(([filePath, tests]) => {
+  const parseWarnings: string[] = [];
+
+  const classify = (test: MochaTestResult): 'passed' | 'failed' | 'pending' =>
+    pendingTitles.has(test.fullTitle) ? 'pending' : failedTitles.has(test.fullTitle) ? 'failed' : 'passed';
+
+  const files: NormalisedTestFile[] = Array.from(fileGroups.entries()).flatMap(([filePath, tests]) => {
     const tags = tagMap[filePath] ?? {};
+
+    if (tags.xrayTests && tags.xrayTests.length > 0) {
+      const entries: NormalisedTestFile[] = [];
+
+      for (const { key, title } of tags.xrayTests) {
+        if (!title) {
+          parseWarnings.push(`@xray_test ${key} in ${filePath} has no following it()/test() block — skipping`);
+          continue;
+        }
+
+        const match = tests.find((t) => t.title === title);
+        if (!match) {
+          parseWarnings.push(`@xray_test ${key} in ${filePath} didn't match any test titled "${title}" — skipping`);
+          continue;
+        }
+
+        const outcome = classify(match);
+        const failed = outcome === 'failed' ? 1 : 0;
+
+        entries.push({
+          filePath,
+          testTitle: title,
+          xrayPlan: tags.xrayPlan,
+          xrayTest: key,
+          xrayFolder: tags.xrayFolder,
+          jiraParent: tags.jiraParent,
+          passed: outcome === 'passed' ? 1 : 0,
+          failed,
+          skipped: outcome === 'pending' ? 1 : 0,
+          duration: match.duration ?? 0,
+          status: failed > 0 ? 'FAIL' : 'PASS',
+          failures:
+            outcome === 'failed'
+              ? [{ testName: match.fullTitle, message: (match.err?.message ?? '').split('\n')[0] }]
+              : [],
+        });
+      }
+
+      return entries;
+    }
 
     let passed = 0;
     let failed = 0;
@@ -87,10 +132,11 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
 
     for (const test of tests) {
       totalDuration += test.duration ?? 0;
+      const outcome = classify(test);
 
-      if (pendingTitles.has(test.fullTitle)) {
+      if (outcome === 'pending') {
         skipped++;
-      } else if (failedTitles.has(test.fullTitle)) {
+      } else if (outcome === 'failed') {
         failed++;
         failures.push({
           testName: test.fullTitle,
@@ -107,7 +153,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
 
     const status: XrayTestStatus = failed > 0 ? 'FAIL' : 'PASS';
 
-    return {
+    return [{
       filePath,
       xrayPlan: tags.xrayPlan,
       xrayTest: tags.xrayTest,
@@ -119,7 +165,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
       duration: totalDuration,
       status,
       failures,
-    };
+    }];
   });
 
   const overallStatus: XrayTestStatus = output.stats.failures > 0 ? 'FAIL' : 'PASS';
@@ -131,6 +177,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
     totalFailed: output.stats.failures,
     totalSkipped: output.stats.pending,
     overallStatus,
+    parseWarnings,
   };
 }
 

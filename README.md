@@ -62,24 +62,28 @@ xray-sync-service instance.
 
 ## Tagging test files
 
-Add these comments within the first 20 lines of a test file:
-
 ```js
-// @xray_test DTV-33
 // @xray_plan DTV-149
 // @xray_folder /Authentication/Login
 // @jira_parent DTV-15
-describe('Login endpoint', () => { /* ... */ })
+
+describe('Login endpoint', () => {
+  // @xray_test DTV-33
+  it('returns 200 for valid credentials', () => { /* ... */ });
+
+  // @xray_test DTV-34
+  it('returns 401 for invalid credentials', () => { /* ... */ });
+});
 ```
 
 | Tag | Required | Description |
 |---|---|---|
-| `@xray_test` | **Yes** | Jira key of the Xray Test this file's run status updates. Without this tag the file is skipped — no test run gets created or updated in Xray. |
+| `@xray_test` | **Yes** | Jira key of the Xray Test this maps to. Without at least one of these in the file, the file is skipped — no test run gets created or updated in Xray. One tag anywhere in the file = whole-file aggregate; 2+ tags = per-block mode, where each tag must sit directly above the `it()`/`test()` call it applies to. |
 | `@xray_plan` | No | Jira key of the Test Plan this test belongs to |
 | `@xray_folder` | No | Folder path to file the test under in the Xray repository |
 | `@jira_parent` | No | Jira issue to link this test to |
 
-Python/PHP files use `#` comments instead of `//`.
+Python/PHP files use `#` comments instead of `//`. See [instructions/tag_refs.md](instructions/tag_refs.md) for the full reference, including both tagging modes.
 
 ## .xray-sync.yml reference
 

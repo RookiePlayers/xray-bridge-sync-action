@@ -61,4 +61,59 @@ describe('extractTags', () => {
   it('rejects unsupported reporters', () => {
     expect(() => extractTags('{}', 'cypress')).toThrow(/Unsupported reporter/);
   });
+
+  it('switches to per-block mode when a file has 2+ @xray_test tags, pairing each with its following it() block', () => {
+    const testFile = path.join(dir, 'analytics.test.js');
+    fs.writeFileSync(
+      testFile,
+      [
+        '// @xray_plan DTV-149',
+        '// @xray_folder Backend/Analytics',
+        '// @jira_parent DTV-8',
+        '',
+        "describe('fetchAnalyticsSummary', () => {",
+        '  // @xray_test DTV-150',
+        "  it('aggregates totals from GA4 responses', async () => {});",
+        '',
+        '  // @xray_test DTV-151',
+        "  it('requests the correct GA4 property', async () => {});",
+        '',
+        "  it('rejects when the GA4 client throws', async () => {});",
+        '});',
+      ].join('\n')
+    );
+
+    const raw = JSON.stringify({ testResults: [{ name: testFile }] });
+    const tagMap = extractTags(raw, 'jest');
+
+    expect(tagMap[testFile]).toEqual({
+      xrayPlan: 'DTV-149',
+      xrayFolder: 'Backend/Analytics',
+      jiraParent: 'DTV-8',
+      xrayTests: [
+        { key: 'DTV-150', title: 'aggregates totals from GA4 responses' },
+        { key: 'DTV-151', title: 'requests the correct GA4 property' },
+      ],
+    });
+  });
+
+  it('keeps whole-file aggregate mode when only one @xray_test tag exists, regardless of position in the file', () => {
+    const testFile = path.join(dir, 'single.test.js');
+    fs.writeFileSync(
+      testFile,
+      [
+        "describe('suite', () => {",
+        "  it('does something unrelated', () => {});",
+        '',
+        '  // @xray_test DTV-99',
+        "  it('does the tagged thing', () => {});",
+        '});',
+      ].join('\n')
+    );
+
+    const raw = JSON.stringify({ testResults: [{ name: testFile }] });
+    const tagMap = extractTags(raw, 'jest');
+
+    expect(tagMap[testFile]).toEqual({ xrayTest: 'DTV-99' });
+  });
 });

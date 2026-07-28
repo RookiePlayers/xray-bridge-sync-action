@@ -1,7 +1,9 @@
 # Xray Tag Reference
 
-Add these comment tags at the very top of a test file, before any imports,
-to connect it to the Xray sync pipeline.
+Add these comment tags to a test file to connect it to the Xray sync pipeline.
+`@xray_plan` / `@xray_folder` / `@jira_parent` go at the very top, before any
+imports. `@xray_test` can go at the top too (whole-file mode) OR directly
+above each `it()`/`test()` block (per-block mode) — see below.
 
 ---
 
@@ -16,7 +18,10 @@ to connect it to the Xray sync pipeline.
 
 ---
 
-## Example
+## Two modes for `@xray_test`
+
+**Whole-file mode — exactly one `@xray_test` tag in the file.**
+Every `it()`/`test()` block in the file counts toward that one Xray Test's pass/fail.
 
 ```javascript
 // @xray_test DTV-47
@@ -31,6 +36,32 @@ describe('Login endpoint', () => {
   it('should return 401 for invalid credentials', ...)
 })
 ```
+
+**Per-block mode — two or more `@xray_test` tags in the file.**
+Each tag must sit directly above the specific `it()`/`test()` call it applies to
+(within a few lines — blank lines and other comments are fine, but not another
+`it()`/`test()` in between). That block's own pass/fail syncs independently to
+that Test. Blocks with no tag directly above them are simply not synced — no
+warning is raised for them.
+
+```javascript
+// @xray_plan DTV-149
+// @xray_folder /Auth/Login
+// @jira_parent DTV-42
+
+describe('Login endpoint', () => {
+  // @xray_test DTV-47
+  it('should return 200 for valid credentials', ...)
+
+  // @xray_test DTV-48
+  it('should return 401 for invalid credentials', ...)
+
+  it('should log the attempt either way', ...) // not tagged — not synced
+})
+```
+
+Use per-block mode whenever a file covers more than one distinct Xray Test
+case. Use whole-file mode only when the entire file really is one Test.
 
 ---
 
@@ -83,6 +114,21 @@ The pipeline will fail to link the Test Execution and log a warning.
 // @xray_folder /Auth/Login
 ```
 `@xray_test` is the only required tag. All others are optional.
+
+**Multiple `@xray_test` tags, but not directly above their `it()`/`test()`:**
+```javascript
+// WRONG — tags are grouped at the top instead of per-block
+// @xray_test DTV-47
+// @xray_test DTV-48
+describe('Login endpoint', () => {
+  it('should return 200 for valid credentials', ...)
+  it('should return 401 for invalid credentials', ...)
+})
+```
+As soon as a file has 2+ `@xray_test` tags, each one must sit directly above
+the specific block it applies to (see per-block mode above). Grouping them
+together like this means DTV-47 binds to whichever `it()` comes first and
+DTV-48 finds nothing to bind to — logged as a parse warning, not synced.
 
 ---
 

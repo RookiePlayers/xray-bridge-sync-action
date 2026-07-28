@@ -38,25 +38,33 @@ In your repo go to **Settings → Secrets and variables → Actions → New repo
 
 ### 4. Tag your test files
 
-At the top of each test file add:
-
 ```typescript
 // @xray_plan DTV-149
-// @xray_test DTV-33
-// @xray_folder /Authentication/Login
-// @jira_parent DTV-15
+// @xray_folder Backend/Analytics
+// @jira_parent DTV-8
 
-describe('Login endpoint', () => {
-  ...
-})
+describe('fetchAnalyticsSummary', () => {
+  // @xray_test DTV-150
+  it('aggregates totals from GA4 responses', async () => { ... });
+
+  // @xray_test DTV-151
+  it('requests the correct GA4 property and date ranges', async () => { ... });
+
+  it('rejects when the GA4 client throws', async () => { ... }); // not tagged — not synced
+});
 ```
 
 | Tag | Required | Description |
 |---|---|---|
-| `@xray_test` | ✅ | Jira key of the specific Xray Test this file's results map to. Without this the file is skipped entirely. |
+| `@xray_test` | ✅ | Jira key of the specific Xray Test this maps to. Without at least one of these in the file, the file is skipped entirely. |
 | `@xray_plan` | ❌ | Jira key of the Test Plan this test belongs to. When present, the Test Execution created/reused for this sync run is linked to that Test Plan. If the key doesn't resolve to a real Test Plan, this is logged as a warning and the rest of the sync still proceeds. |
 | `@xray_folder` | ❌ | Folder path in the Xray Test Repository. If omitted, test is synced without folder assignment. |
 | `@jira_parent` | ❌ | Jira story this test covers. When a test's pass/fail status changes from its last synced state, a Jira issue link (Xray's "Tests" link type) is created between the test and the parent issue. This only fires on a status change, not on every pipeline run, to avoid redundant link operations. If omitted, no issue link is created but everything else works normally. |
+
+**`@xray_test` has two modes, based on how many times it appears in the file:**
+
+- **One tag in the file** — whole-file aggregate. The tag can go anywhere (top of file is conventional); every `it()`/`test()` block in the file counts toward that one Xray Test's pass/fail.
+- **Two or more tags in the file** — per-block mode (shown above). Each `@xray_test` tag must sit directly above the specific `it()`/`test()` call it applies to; that block's own pass/fail (not the whole file's) syncs to that Test. Blocks with no tag above them are simply not synced — no warning.
 
 ### 5. Make sure Jest outputs JSON
 
@@ -164,7 +172,13 @@ on:
 ## Troubleshooting
 
 **Test file is skipped with a warning**
-The `@xray_plan` tag is missing or the Xray test key couldn't be resolved. Check the tag is at the top of the file and the key exists in Jira.
+The `@xray_test` tag is missing or the Xray test key couldn't be resolved. Check the tag is present and the key exists in Jira.
+
+**Warning about a Test Plan that couldn't be resolved**
+The `@xray_plan` key doesn't match a real Test Plan in Jira. The test's own run status still gets synced — only the Test Plan link is skipped. Check the key exists and is actually a Test Plan issue (not a Test or Story).
+
+**Per-block tag warnings ("didn't match any test titled ..." or "has no following it()/test() block")**
+Only relevant when a file has 2+ `@xray_test` tags. Either the tag isn't immediately followed by an `it()`/`test()` call within a few lines, or the test's title changed after the tag was added. Move the tag directly above the block, or update it to match the current title.
 
 **Xray sync step fails with 401**
 The `XRAY_SERVICE_URL` secret is missing or the deployed service credentials have expired. Check the secret value and the Secret Manager entries in GCP.

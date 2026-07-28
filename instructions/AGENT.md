@@ -69,10 +69,26 @@ Read `.xray-sync.yml` if it exists in the repo root. Extract `project_key` and `
 
 ---
 
-## Step 5 — Create the Xray test case FIRST, then write the test file
+## Step 5 — Create the Xray test case(s) FIRST, then write the test file
 
-Unlike the other steps, the Xray test case must be created BEFORE writing the file
-so the returned issue key can be embedded as the `@xray_test` tag.
+Unlike the other steps, the Xray test case(s) must be created BEFORE writing the file
+so the returned issue key(s) can be embedded as `@xray_test` tag(s).
+
+First decide which of the two tagging modes fits the feature (see Step 6 for full
+details on each mode's tag placement):
+
+- **Whole-file mode (default)** — the test cases identified in Step 2 are variations
+  of one behaviour and read naturally as steps of a single manual Test (e.g. "tax rate
+  resolution" with 3 steps: valid rate, missing rate, invalid rate). Create ONE Xray
+  Test with multiple steps.
+- **Per-block mode** — the test cases identified in Step 2 are independently meaningful
+  scenarios that a QA engineer would want to track and report on separately in Xray
+  (e.g. distinct API behaviours, distinct endpoints, distinct business rules bundled
+  in one file for code-organisation reasons only). Create one Xray Test PER scenario.
+  Use this whenever you're unsure which mode fits better — it gives finer-grained
+  Xray reporting at no extra cost.
+
+**Whole-file mode:**
 
 1. Call `create_test` with:
    - `summary`: a clear title describing what this test file covers (e.g. "Payment — tax rate resolution")
@@ -83,7 +99,7 @@ so the returned issue key can be embedded as the `@xray_test` tag.
      - `data`: the input being used
      - `result`: the expected outcome
 
-2. Note the returned `issueKey` (e.g. DTV-47) — this becomes the `@xray_test` tag value
+2. Note the returned `issueKey` (e.g. DTV-47) — this becomes the single `@xray_test` tag value
 
 3. Call `add_to_test_plan` with:
    - `testPlanKey`: the Test Plan key from Step 3
@@ -94,12 +110,25 @@ so the returned issue key can be embedded as the `@xray_test` tag.
    - `path`: the folder path from Step 4
    - `testIssueIds`: the issueId returned from `create_test`
 
+**Per-block mode:**
+
+1. Call `create_test` once PER scenario, each with its own `summary` (e.g. "Analytics — GA4 summary aggregation", "Analytics — GA4 request parameters"), `projectKey`, `testType: "Manual"`, and its own `steps` describing just that one scenario.
+
+2. Note each returned `issueKey` (e.g. DTV-150, DTV-151) and which `it()`/`test()` block it corresponds to — you'll tag each block individually in Step 6.
+
+3. Call `add_to_test_plan` once with `testIssueIds` containing ALL the issueIds from step 1, so every Test lands in the same Test Plan.
+
+4. If the Xray folder from Step 4 was just created or may not exist, call `add_tests_to_folder` once with all the issueIds from step 1.
+
 ---
 
 ## Step 6 — Write the test file
 
-Create the test file in the correct location. At the very top of the file, before any
-imports, add ALL FOUR Xray tags:
+Create the test file in the correct location. `@xray_plan` / `@xray_folder` / `@jira_parent`
+always go at the very top of the file, before any imports — they apply to the whole file
+regardless of tagging mode. Where `@xray_test` goes depends on which mode you chose in Step 5:
+
+**Whole-file mode** — `@xray_test` also goes at the top, alongside the other tags:
 
 ```
 // @xray_test <issue-key-from-step-5>      ← REQUIRED — Xray Test issue key (e.g. DTV-47)
@@ -108,10 +137,30 @@ imports, add ALL FOUR Xray tags:
 // @jira_parent <feature-issue-key>        ← optional — parent Jira story (e.g. DTV-42)
 ```
 
+**Per-block mode** — `@xray_test` goes directly above EACH `it()`/`test()` call it applies to
+(no blank `it()`/`test()` call in between — blank lines and other comments are fine). Any
+`it()`/`test()` in the file with no `@xray_test` directly above it is simply not synced —
+only tag the blocks you created a Test for in Step 5:
+
+```
+// @xray_plan <test-plan-key-from-step-3>
+// @xray_folder <folder-from-step-4>
+// @jira_parent <feature-issue-key>
+
+describe('...', () => {
+  // @xray_test <issue-key-for-scenario-1>
+  it('...', () => { ... });
+
+  // @xray_test <issue-key-for-scenario-2>
+  it('...', () => { ... });
+});
+```
+
 **Critical tag semantics — never confuse these:**
-- `@xray_test` → the Xray **Test** issue key. REQUIRED. The pipeline uses this to update
-  the individual test's run status (PASS/FAIL) under the Test Execution. Without this tag
-  the file is skipped entirely — no status is ever recorded.
+- `@xray_test` → the Xray **Test** issue key. REQUIRED (at least one per file). The pipeline
+  uses this to update that test's run status (PASS/FAIL) under the Test Execution. A file
+  with zero `@xray_test` tags is skipped entirely — no status is ever recorded. A block with
+  no `@xray_test` tag directly above it (in per-block mode) is simply not synced.
 - `@xray_plan` → the Xray **Test Plan** issue key. Optional. The pipeline links the
   Test Execution to this plan so results appear under the Test Plan's "Test Executions" tab.
 - `@xray_folder` → Xray Test Repository folder path. Optional.
@@ -120,6 +169,10 @@ imports, add ALL FOUR Xray tags:
 
 Never use a Test Plan key as `@xray_test`. Never use a Test issue key as `@xray_plan`.
 These are different issue types in Jira — using the wrong key causes the sync to fail silently.
+
+In per-block mode, never group multiple `@xray_test` tags together at the top of the file —
+each one MUST sit directly above its own `it()`/`test()` call, or it will bind to the wrong
+block (or nothing) and the mismatch is only caught as a parse warning, not an error.
 
 For `@jira_parent`, use the Jira issue key for the feature/story this test covers if the
 user has mentioned it, or ask:

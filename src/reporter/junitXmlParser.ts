@@ -106,9 +106,64 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
   let totalPassed = 0;
   let totalFailed = 0;
   let totalSkipped = 0;
+  const parseWarnings: string[] = [];
 
-  const files: NormalisedTestFile[] = Array.from(fileGroups.entries()).map(([fileKey, entries]) => {
+  const classify = (testcase: JUnitTestCase): 'passed' | 'failed' | 'skipped' =>
+    testcase.skipped !== undefined ? 'skipped' : testcase.failure || testcase.error ? 'failed' : 'passed';
+
+  const buildFailure = (testcase: JUnitTestCase): TestFailure => {
+    const failureNode = Array.isArray(testcase.failure)
+      ? testcase.failure[0]
+      : testcase.failure ?? testcase.error;
+    return {
+      testName: testcase['@_name'],
+      message: failureNode?.['@_message'] ?? (failureNode?.['#text'] ?? '').split('\n')[0],
+    };
+  };
+
+  const files: NormalisedTestFile[] = Array.from(fileGroups.entries()).flatMap(([fileKey, entries]) => {
     const tags = tagMap[fileKey] ?? {};
+
+    if (tags.xrayTests && tags.xrayTests.length > 0) {
+      const blockEntries: NormalisedTestFile[] = [];
+
+      for (const { key, title } of tags.xrayTests) {
+        if (!title) {
+          parseWarnings.push(`@xray_test ${key} in ${fileKey} has no following it()/test() block — skipping`);
+          continue;
+        }
+
+        const match = entries.find(({ testcase }) => testcase['@_name'] === title);
+        if (!match) {
+          parseWarnings.push(`@xray_test ${key} in ${fileKey} didn't match any test titled "${title}" — skipping`);
+          continue;
+        }
+
+        const outcome = classify(match.testcase);
+        const failed = outcome === 'failed' ? 1 : 0;
+
+        blockEntries.push({
+          filePath: fileKey,
+          testTitle: title,
+          xrayPlan: tags.xrayPlan,
+          xrayTest: key,
+          xrayFolder: tags.xrayFolder,
+          jiraParent: tags.jiraParent,
+          passed: outcome === 'passed' ? 1 : 0,
+          failed,
+          skipped: outcome === 'skipped' ? 1 : 0,
+          duration: parseFloat(match.testcase['@_time'] ?? '0') * 1000,
+          status: failed > 0 ? 'FAIL' : 'PASS',
+          failures: outcome === 'failed' ? [buildFailure(match.testcase)] : [],
+        });
+      }
+
+      totalPassed += blockEntries.filter((e) => e.passed).length;
+      totalFailed += blockEntries.filter((e) => e.failed).length;
+      totalSkipped += blockEntries.filter((e) => e.skipped).length;
+
+      return blockEntries;
+    }
 
     let passed = 0;
     let failed = 0;
@@ -120,18 +175,13 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
       // JUnit time is in seconds; convert to milliseconds for consistency with
       // Jest/Mocha which both report in ms
       totalDuration += parseFloat(testcase['@_time'] ?? '0') * 1000;
+      const outcome = classify(testcase);
 
-      if (testcase.skipped !== undefined) {
+      if (outcome === 'skipped') {
         skipped++;
-      } else if (testcase.failure || testcase.error) {
+      } else if (outcome === 'failed') {
         failed++;
-        const failureNode = Array.isArray(testcase.failure)
-          ? testcase.failure[0]
-          : testcase.failure ?? testcase.error;
-        failures.push({
-          testName: testcase['@_name'],
-          message: failureNode?.['@_message'] ?? (failureNode?.['#text'] ?? '').split('\n')[0],
-        });
+        failures.push(buildFailure(testcase));
       } else {
         passed++;
       }
@@ -143,7 +193,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
 
     const status: XrayTestStatus = failed > 0 ? 'FAIL' : 'PASS';
 
-    return {
+    return [{
       filePath: fileKey,
       xrayPlan: tags.xrayPlan,
       xrayTest: tags.xrayTest,
@@ -155,7 +205,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
       duration: totalDuration,
       status,
       failures,
-    };
+    }];
   });
 
   const overallStatus: XrayTestStatus = totalFailed > 0 ? 'FAIL' : 'PASS';
@@ -168,6 +218,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
     totalFailed,
     totalSkipped,
     overallStatus,
+    parseWarnings,
   };
 }
 

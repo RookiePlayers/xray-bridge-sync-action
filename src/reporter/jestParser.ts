@@ -25,6 +25,7 @@ interface JestTestResult {
 }
 
 interface JestAssertionResult {
+  title: string;
   fullName: string;
   status: 'passed' | 'failed' | 'pending';
   failureMessages: string[];
@@ -37,9 +38,9 @@ interface JestAssertionResult {
  * Parses Jest --json output into the normalised internal format.
  *
  * @param raw     Raw Jest --json output (as a string)
- * @param tagMap  Map of filePath -> { xrayPlan, xrayFolder, jiraParent },
- *                built by the GitHub Action's extract-tags.js script since
- *                the service has no filesystem access to the consumer repo.
+ * @param tagMap  Map of filePath -> FileTags, built by the GitHub Action's
+ *                tagExtractor.ts since the service has no filesystem access
+ *                to the consumer repo.
  */
 export function parseJestOutput(raw: string, tagMap: Record<string, FileTags> = {}): NormalisedResult {
   let output: JestOutput;
@@ -57,42 +58,17 @@ export function parseJestOutput(raw: string, tagMap: Record<string, FileTags> = 
     throw new Error(`Invalid Jest output shape — missing or non-array testResults. Got keys: ${keys}`);
   }
 
-  const files: NormalisedTestFile[] = output.testResults.map((fileResult) => {
+  const parseWarnings: string[] = [];
+
+  const files: NormalisedTestFile[] = output.testResults.flatMap((fileResult) => {
     const tags = tagMap[fileResult.name] ?? {};
     const assertionResults = fileResult.assertionResults ?? [];
 
-    const passed = assertionResults.filter((t) => t.status === 'passed').length;
-    const failed = assertionResults.filter((t) => t.status === 'failed').length;
-    const skipped = assertionResults.filter((t) => t.status === 'pending').length;
+    if (tags.xrayTests && tags.xrayTests.length > 0) {
+      return buildBlockEntries(fileResult.name, tags, assertionResults, parseWarnings);
+    }
 
-    const failures: TestFailure[] = assertionResults
-      .filter((t) => t.status === 'failed')
-      .map((t) => {
-        const rawMessage = t.failureMessages?.[0] ?? '';
-        return {
-          testName: t.fullName,
-          message: cleanFailureMessage(rawMessage),
-          expected: extractExpected(rawMessage),
-          received: extractReceived(rawMessage),
-        };
-      });
-
-    const status: XrayTestStatus = failed > 0 ? 'FAIL' : 'PASS';
-    const duration = fileResult.endTime - fileResult.startTime;
-
-    return {
-      filePath: fileResult.name,
-      xrayPlan: tags.xrayPlan,
-      xrayTest: tags.xrayTest,
-      xrayFolder: tags.xrayFolder,
-      jiraParent: tags.jiraParent,
-      passed,
-      failed,
-      skipped,
-      duration,
-      status,
-      failures,
-    };
+    return [buildWholeFileEntry(fileResult, tags, assertionResults)];
   });
 
   const overallStatus: XrayTestStatus = output.numFailedTests > 0 ? 'FAIL' : 'PASS';
@@ -104,6 +80,93 @@ export function parseJestOutput(raw: string, tagMap: Record<string, FileTags> = 
     totalFailed: output.numFailedTests,
     totalSkipped: output.numPendingTests,
     overallStatus,
+    parseWarnings,
+  };
+}
+
+// ─── Whole-file aggregate (0 or 1 @xray_test tag in the file) ────────────────
+
+function buildWholeFileEntry(
+  fileResult: JestTestResult,
+  tags: FileTags,
+  assertionResults: JestAssertionResult[]
+): NormalisedTestFile {
+  const passed = assertionResults.filter((t) => t.status === 'passed').length;
+  const failed = assertionResults.filter((t) => t.status === 'failed').length;
+  const skipped = assertionResults.filter((t) => t.status === 'pending').length;
+
+  const failures: TestFailure[] = assertionResults
+    .filter((t) => t.status === 'failed')
+    .map(buildFailure);
+
+  const status: XrayTestStatus = failed > 0 ? 'FAIL' : 'PASS';
+  const duration = fileResult.endTime - fileResult.startTime;
+
+  return {
+    filePath: fileResult.name,
+    xrayPlan: tags.xrayPlan,
+    xrayTest: tags.xrayTest,
+    xrayFolder: tags.xrayFolder,
+    jiraParent: tags.jiraParent,
+    passed,
+    failed,
+    skipped,
+    duration,
+    status,
+    failures,
+  };
+}
+
+// ─── Per-block mode (2+ @xray_test tags in the file) ─────────────────────────
+
+function buildBlockEntries(
+  filePath: string,
+  tags: FileTags,
+  assertionResults: JestAssertionResult[],
+  parseWarnings: string[]
+): NormalisedTestFile[] {
+  const entries: NormalisedTestFile[] = [];
+
+  for (const { key, title } of tags.xrayTests ?? []) {
+    if (!title) {
+      parseWarnings.push(`@xray_test ${key} in ${filePath} has no following it()/test() block — skipping`);
+      continue;
+    }
+
+    const match = assertionResults.find((t) => t.title === title);
+    if (!match) {
+      parseWarnings.push(`@xray_test ${key} in ${filePath} didn't match any test titled "${title}" — skipping`);
+      continue;
+    }
+
+    const failed = match.status === 'failed' ? 1 : 0;
+
+    entries.push({
+      filePath,
+      testTitle: title,
+      xrayPlan: tags.xrayPlan,
+      xrayTest: key,
+      xrayFolder: tags.xrayFolder,
+      jiraParent: tags.jiraParent,
+      passed: match.status === 'passed' ? 1 : 0,
+      failed,
+      skipped: match.status === 'pending' ? 1 : 0,
+      duration: match.duration ?? 0,
+      status: failed > 0 ? 'FAIL' : 'PASS',
+      failures: match.status === 'failed' ? [buildFailure(match)] : [],
+    });
+  }
+
+  return entries;
+}
+
+function buildFailure(t: JestAssertionResult): TestFailure {
+  const rawMessage = t.failureMessages?.[0] ?? '';
+  return {
+    testName: t.fullName,
+    message: cleanFailureMessage(rawMessage),
+    expected: extractExpected(rawMessage),
+    received: extractReceived(rawMessage),
   };
 }
 
