@@ -1,0 +1,17 @@
+# Dockerfile — builds the Bitbucket Pipe image
+# Published to Docker Hub as rookieplayers/xray-bridge-sync-pipe:v1
+#
+# Build: docker build -f Dockerfile.pipe -t rookieplayers/xray-bridge-sync-pipe:v1 .
+# Push:  docker push rookieplayers/xray-bridge-sync-pipe:v1
+
+FROM node:20-slim
+
+WORKDIR /usr/src/pipe
+
+# Copy the whole ncc-bundled output — index.js requires ./sourcemap-register.js
+# alongside it (added by the --source-map build flag), so copying just index.js
+# is not enough. All dependencies are already bundled in, so no npm install
+# is needed inside the container.
+COPY dist-bb/ ./
+
+CMD ["node", "index.js"]

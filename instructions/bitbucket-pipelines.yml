@@ -1,0 +1,95 @@
+# bitbucket-pipelines.yml
+#
+# Drop this in the root of any Bitbucket repo using the xray-bridge-sync pipe.
+# Adjust the branches and Node version to match your project.
+#
+# Prerequisites:
+#   1. Add XRAY_SERVICE_URL as a Bitbucket repository variable:
+#      Repository settings -> Pipelines -> Repository variables
+#      Value: https://xray-sync-service-166488387568.europe-west2.run.app
+#
+#   2. Add a .xray-sync.yml to your repo root:
+#      project_key: DTV
+#      fix_version: v1.0
+#      reporter: jest
+#      execution_mode: per_run
+#      test_results_path: ./test-results.json
+
+image: node:20
+
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Test & Sync to Xray
+          caches:
+            - node
+          script:
+            # Install your project dependencies first —
+            # the pipe does not do this for you (same as the GitHub Action).
+            - npm ci
+
+            # Run the Xray Bridge Sync pipe.
+            # The pipe handles: running tests, extracting @xray_test tags,
+            # and posting results to your xray-sync-service instance.
+            - pipe: docker://ollie2224/xray-bridge-sync-pipe:v1
+              variables:
+                XRAY_SERVICE_URL: $XRAY_SERVICE_URL
+
+    develop:
+      - step:
+          name: Test & Sync to Xray
+          caches:
+            - node
+          script:
+            - npm ci
+            - pipe: docker://ollie2224/xray-bridge-sync-pipe:v1
+              variables:
+                XRAY_SERVICE_URL: $XRAY_SERVICE_URL# bitbucket-pipelines.yml
+#
+# Drop this in the root of any Bitbucket repo using the xray-bridge-sync pipe.
+# Adjust the branches and Node version to match your project.
+#
+# Prerequisites:
+#   1. Add XRAY_SERVICE_URL as a Bitbucket repository variable:
+#      Repository settings -> Pipelines -> Repository variables
+#      Value: https://xray-sync-service-166488387568.europe-west2.run.app
+#
+#   2. Add a .xray-sync.yml to your repo root:
+#      project_key: DTV
+#      fix_version: v1.0
+#      reporter: jest
+#      execution_mode: per_run
+#      test_results_path: ./test-results.json
+
+image: node:20
+
+pipelines:
+  branches:
+    main:
+      - step:
+          name: Test & Sync to Xray
+          caches:
+            - node
+          script:
+            # Install your project dependencies first —
+            # the pipe does not do this for you (same as the GitHub Action).
+            - npm ci
+
+            # Run the Xray Bridge Sync pipe.
+            # The pipe handles: running tests, extracting @xray_test tags,
+            # and posting results to your xray-sync-service instance.
+            - pipe: docker://ollie2224/xray-bridge-sync-pipe:v1
+              variables:
+                XRAY_SERVICE_URL: $XRAY_SERVICE_URL
+
+    develop:
+      - step:
+          name: Test & Sync to Xray
+          caches:
+            - node
+          script:
+            - npm ci
+            - pipe: docker://ollie2224/xray-bridge-sync-pipe:v1
+              variables:
+                XRAY_SERVICE_URL: $XRAY_SERVICE_URL

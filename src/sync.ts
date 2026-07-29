@@ -43,15 +43,18 @@ export async function syncResults(
   xrayServiceUrl: string,
   config: SyncConfig,
   rawResults: string,
-  tagMap: TagMap
+  tagMap: TagMap,
+  commitShaOverride?: string,   // NEW — used by Bitbucket entry point
+  branchOverride?: string,       // NEW
+  runUrlOverride?: string        // NEW
 ): Promise<SyncResult> {
   const payload: SyncPayload = {
     config,
     rawResults,
     tagMap,
-    commitSha: process.env.GITHUB_SHA,
-    branch: process.env.GITHUB_REF_NAME,
-    runUrl: buildRunUrl(),
+    commitSha: commitShaOverride ?? process.env.GITHUB_SHA,
+    branch:    branchOverride    ?? process.env.GITHUB_REF_NAME,
+    runUrl:    runUrlOverride    ?? buildRunUrl(),
   };
 
   core.info(`Syncing to Xray: project=${config.project_key}, version=${config.fix_version}, reporter=${config.reporter}`);

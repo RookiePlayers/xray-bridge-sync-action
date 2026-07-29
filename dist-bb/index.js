@@ -5817,7 +5817,7 @@ module.exports.types = {
   set: __nccwpck_require__(8758),
   timestamp: __nccwpck_require__(8966),
   bool: __nccwpck_require__(7296),
-  int: __nccwpck_require__(4652),
+  int: __nccwpck_require__(2271),
   merge: __nccwpck_require__(6854),
   omap: __nccwpck_require__(8649),
   seq: __nccwpck_require__(7161),
@@ -8893,7 +8893,7 @@ module.exports = (__nccwpck_require__(9832).extend)({
   implicit: [
     __nccwpck_require__(4333),
     __nccwpck_require__(7296),
-    __nccwpck_require__(4652),
+    __nccwpck_require__(2271),
     __nccwpck_require__(7584)
   ]
 })
@@ -9359,7 +9359,7 @@ module.exports = new Type('tag:yaml.org,2002:float', {
 
 /***/ }),
 
-/***/ 4652:
+/***/ 2271:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -32429,11 +32429,29 @@ module.exports = {
 
 /***/ }),
 
-/***/ 9407:
+/***/ 528:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
+/**
+ * src/index.bitbucket.ts
+ *
+ * Bitbucket Pipelines entry point — functionally identical to index.ts but
+ * replaces all @actions/core and @actions/exec calls with native Node.js
+ * equivalents, since neither package works outside GitHub Actions runners.
+ *
+ * Inputs come from environment variables instead of action.yml inputs.
+ * Secrets come from Bitbucket repository/workspace variables.
+ *
+ * Required env vars:
+ *   XRAY_SERVICE_URL   — URL of your deployed xray-sync-service instance
+ *
+ * Optional env vars (override .xray-sync.yml values):
+ *   XRAY_REPORTER      — jest | mocha | pest | pytest
+ *   XRAY_CONFIG_PATH   — path to .xray-sync.yml (default: .xray-sync.yml)
+ *   XRAY_WORKING_DIR   — working directory for running tests (default: .)
+ */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -32468,90 +32486,129 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-const core = __importStar(__nccwpck_require__(7484));
-const exec = __importStar(__nccwpck_require__(5236));
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
 const yaml = __importStar(__nccwpck_require__(4281));
+const child_process_1 = __nccwpck_require__(5317);
 const tagExtractor_1 = __nccwpck_require__(5311);
 const sync_1 = __nccwpck_require__(4448);
-async function run() {
-    try {
-        // ─── Read inputs ──────────────────────────────────────────────────────────
-        const xrayServiceUrl = core.getInput('xray_service_url', { required: true });
-        const inputReporter = core.getInput('reporter');
-        const configPath = core.getInput('config_path') || '.xray-sync.yml';
-        const workingDir = core.getInput('working_directory') || '.';
-        // ─── Read .xray-sync.yml (resolved relative to working_directory) ────────
-        const resolvedConfigPath = path.resolve(workingDir, configPath);
-        if (!fs.existsSync(resolvedConfigPath)) {
-            core.setFailed(`.xray-sync.yml not found at ${resolvedConfigPath}`);
-            return;
-        }
-        const config = yaml.load(fs.readFileSync(resolvedConfigPath, 'utf-8'));
-        const reporter = inputReporter || config.reporter || 'jest';
-        const resultsPath = config.test_results_path || './test-results.json';
-        const executionMode = config.execution_mode || 'per_run';
-        core.info(`Config: project=${config.project_key}, version=${config.fix_version}, reporter=${reporter}`);
-        // ─── Run tests (reporter-specific) ───────────────────────────────────────
-        if (workingDir !== '.')
-            process.chdir(workingDir);
-        let testExitCode = 0;
-        if (reporter === 'jest') {
-            testExitCode = await exec.exec('npx', ['jest', '--json', `--outputFile=${resultsPath}`, '--passWithNoTests'], { ignoreReturnCode: true });
-        }
-        else if (reporter === 'mocha') {
-            testExitCode = await exec.exec('npx', ['mocha', '--reporter', 'json', '--reporter-options', `output=${resultsPath}`], { ignoreReturnCode: true });
-        }
-        else if (reporter === 'pest') {
-            testExitCode = await exec.exec('./vendor/bin/pest', [`--log-junit=${resultsPath}`], { ignoreReturnCode: true });
-        }
-        else if (reporter === 'pytest') {
-            testExitCode = await exec.exec('python', ['-m', 'pytest', `--junit-xml=${resultsPath}`], { ignoreReturnCode: true });
-        }
-        else {
-            core.setFailed(`Unsupported reporter: ${reporter}. Supported: jest, mocha, pest, pytest`);
-            return;
-        }
-        if (!fs.existsSync(resultsPath)) {
-            core.setFailed(`Test results file not found at ${resultsPath}`);
-            return;
-        }
-        const rawResults = fs.readFileSync(resultsPath, 'utf-8');
-        // ─── Extract tags ─────────────────────────────────────────────────────────
-        const tagMap = (0, tagExtractor_1.extractTags)(rawResults, reporter);
-        // ─── Sync to Xray ─────────────────────────────────────────────────────────
-        const syncConfig = {
-            project_key: config.project_key,
-            fix_version: config.fix_version,
-            reporter,
-            execution_mode: executionMode,
-        };
-        const result = await (0, sync_1.syncResults)(xrayServiceUrl, syncConfig, rawResults, tagMap);
-        // ─── Set outputs ──────────────────────────────────────────────────────────
-        core.setOutput('execution_key', result.executionKey ?? 'unknown');
-        core.setOutput('overall_status', result.overallStatus ?? 'unknown');
-        // ─── Job summary ──────────────────────────────────────────────────────────
-        await core.summary
-            .addHeading('Test Results')
-            .addTable([
-            [{ data: 'Field', header: true }, { data: 'Value', header: true }],
-            ['Branch', process.env.GITHUB_REF_NAME ?? ''],
-            ['Commit', process.env.GITHUB_SHA ?? ''],
-            ['Xray Execution', result.executionKey ?? 'unknown'],
-            ['Overall Status', result.overallStatus ?? 'unknown'],
-        ])
-            .write();
-        // ─── Fail the job if tests failed ─────────────────────────────────────────
-        if (testExitCode !== 0) {
-            core.setFailed(`Tests failed — see Xray execution ${result.executionKey} for details`);
-        }
+// ─── Bitbucket-compatible logger ─────────────────────────────────────────────
+const log = {
+    info: (msg) => console.log(`[xray-sync] ${msg}`),
+    warn: (msg) => console.warn(`[xray-sync] WARNING: ${msg}`),
+    error: (msg) => console.error(`[xray-sync] ERROR: ${msg}`),
+};
+function fail(msg) {
+    log.error(msg);
+    process.exit(1);
+}
+// ─── Spawn helper (replaces @actions/exec) ───────────────────────────────────
+function runCommand(cmd, args, cwd) {
+    log.info(`Running: ${cmd} ${args.join(' ')}`);
+    const result = (0, child_process_1.spawnSync)(cmd, args, {
+        cwd: cwd ?? process.cwd(),
+        stdio: 'inherit', // pipe stdout/stderr directly to the Bitbucket pipeline log
+        env: process.env,
+    });
+    if (result.error) {
+        log.warn(`Command error: ${result.error.message}`);
+        return 1;
     }
-    catch (err) {
-        core.setFailed(err instanceof Error ? err.message : String(err));
+    return result.status ?? 1;
+}
+// ─── Bitbucket environment helpers ───────────────────────────────────────────
+function getBitbucketEnv() {
+    // Bitbucket Pipelines exposes these automatically — no config needed.
+    // https://support.atlassian.com/bitbucket-cloud/docs/variables-and-secrets/
+    const workspace = process.env.BITBUCKET_WORKSPACE;
+    const repo = process.env.BITBUCKET_REPO_SLUG;
+    const buildNumber = process.env.BITBUCKET_BUILD_NUMBER;
+    return {
+        commitSha: process.env.BITBUCKET_COMMIT,
+        branch: process.env.BITBUCKET_BRANCH,
+        runUrl: workspace && repo && buildNumber
+            ? `https://bitbucket.org/${workspace}/${repo}/pipelines/results/${buildNumber}`
+            : undefined,
+    };
+}
+async function run() {
+    // ─── Read inputs from env vars ──────────────────────────────────────────────
+    const xrayServiceUrl = process.env.XRAY_SERVICE_URL;
+    if (!xrayServiceUrl)
+        fail('XRAY_SERVICE_URL environment variable is required');
+    const inputReporter = process.env.XRAY_REPORTER ?? '';
+    const configPath = process.env.XRAY_CONFIG_PATH ?? '.xray-sync.yml';
+    const workingDir = process.env.XRAY_WORKING_DIR ?? '.';
+    // ─── Read .xray-sync.yml ────────────────────────────────────────────────────
+    const resolvedConfigPath = path.resolve(workingDir, configPath);
+    if (!fs.existsSync(resolvedConfigPath)) {
+        fail(`.xray-sync.yml not found at ${resolvedConfigPath}`);
+    }
+    const config = yaml.load(fs.readFileSync(resolvedConfigPath, 'utf-8'));
+    const reporter = inputReporter || config.reporter || 'jest';
+    const resultsPath = config.test_results_path || './test-results.json';
+    const executionMode = config.execution_mode || 'per_run';
+    log.info(`Config: project=${config.project_key}, version=${config.fix_version}, reporter=${reporter}`);
+    // ─── Change to working directory if specified ───────────────────────────────
+    if (workingDir !== '.') {
+        process.chdir(workingDir);
+        log.info(`Working directory: ${process.cwd()}`);
+    }
+    // ─── Run tests (reporter-specific) ─────────────────────────────────────────
+    let testExitCode = 0;
+    if (reporter === 'jest') {
+        testExitCode = runCommand('npx', ['jest', '--json', `--outputFile=${resultsPath}`, '--passWithNoTests']);
+    }
+    else if (reporter === 'mocha') {
+        testExitCode = runCommand('npx', ['mocha', '--reporter', 'json', '--reporter-options', `output=${resultsPath}`]);
+    }
+    else if (reporter === 'pest') {
+        testExitCode = runCommand('./vendor/bin/pest', [`--log-junit=${resultsPath}`]);
+    }
+    else if (reporter === 'pytest') {
+        testExitCode = runCommand('python', ['-m', 'pytest', `--junit-xml=${resultsPath}`]);
+    }
+    else {
+        fail(`Unsupported reporter: ${reporter}. Supported: jest, mocha, pest, pytest`);
+    }
+    if (!fs.existsSync(resultsPath)) {
+        fail(`Test results file not found at ${resultsPath} — did the test command run?`);
+    }
+    const rawResults = fs.readFileSync(resultsPath, 'utf-8');
+    // ─── Extract tags ────────────────────────────────────────────────────────────
+    const tagMap = (0, tagExtractor_1.extractTags)(rawResults, reporter);
+    log.info(`Tag map: ${Object.keys(tagMap).length} tagged file(s)`);
+    // ─── Sync to Xray ────────────────────────────────────────────────────────────
+    const syncConfig = {
+        project_key: config.project_key,
+        fix_version: config.fix_version,
+        reporter,
+        execution_mode: executionMode,
+    };
+    const bbEnv = getBitbucketEnv();
+    const result = await (0, sync_1.syncResults)(xrayServiceUrl, syncConfig, rawResults, tagMap, bbEnv.commitSha, bbEnv.branch, bbEnv.runUrl);
+    log.info(`Execution key: ${result.executionKey}`);
+    log.info(`Overall status: ${result.overallStatus}`);
+    log.info(`Tests: ${result.passed} passed, ${result.failed} failed, ${result.skipped} skipped`);
+    // ─── Print summary ───────────────────────────────────────────────────────────
+    console.log('');
+    console.log('─── Xray Sync Summary ───────────────────────────────────────');
+    console.log(`  Execution:  ${result.executionKey}`);
+    console.log(`  Status:     ${result.overallStatus}`);
+    console.log(`  Branch:     ${bbEnv.branch ?? 'unknown'}`);
+    console.log(`  Commit:     ${bbEnv.commitSha ?? 'unknown'}`);
+    if (bbEnv.runUrl)
+        console.log(`  Pipeline:   ${bbEnv.runUrl}`);
+    console.log('─────────────────────────────────────────────────────────────');
+    console.log('');
+    // ─── Fail the pipeline if tests failed ───────────────────────────────────────
+    if (testExitCode !== 0) {
+        fail(`Tests failed — see Xray execution ${result.executionKey} for details`);
     }
 }
-run();
+run().catch(err => {
+    fail(err instanceof Error ? err.message : String(err));
+});
 
 
 /***/ }),
@@ -33185,7 +33242,7 @@ const inherits = (__nccwpck_require__(7975).inherits)
 const StreamSearch = __nccwpck_require__(4136)
 
 const PartStream = __nccwpck_require__(612)
-const HeaderParser = __nccwpck_require__(2271)
+const HeaderParser = __nccwpck_require__(4652)
 
 const DASH = 45
 const B_ONEDASH = Buffer.from('-')
@@ -33394,7 +33451,7 @@ module.exports = Dicer
 
 /***/ }),
 
-/***/ 2271:
+/***/ 4652:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -34840,7 +34897,7 @@ module.exports = parseParams
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(9407);
+/******/ 	var __webpack_exports__ = __nccwpck_require__(528);
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()

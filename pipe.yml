@@ -1,0 +1,41 @@
+# pipe.yml — Bitbucket Pipe metadata
+# https://support.atlassian.com/bitbucket-cloud/docs/pipe-metadata/
+#
+# This is the Bitbucket Pipelines equivalent of action.yml.
+# The pipe runs dist-bb/index.js (built from src/index.bitbucket.ts via ncc)
+# inside a Node.js Docker container on the Bitbucket runner.
+
+name: Xray Bridge Sync
+description: >
+  Run your tests and sync results to Jira/Xray automatically.
+  Supports Jest, Mocha, Pest (PHP), and Pytest.
+  Requires a running xray-sync-service instance.
+version: '1.0.0'
+image: node:20
+
+variables:
+  XRAY_SERVICE_URL:
+    description: >
+      URL of your deployed xray-sync-service instance.
+      e.g. https://xray-sync-service-166488387568.europe-west2.run.app
+    required: true
+
+  XRAY_REPORTER:
+    description: >
+      Test reporter format: jest | mocha | pest | pytest.
+      Overrides the reporter field in .xray-sync.yml if provided.
+    required: false
+    default: ''
+
+  XRAY_CONFIG_PATH:
+    description: >
+      Path to the .xray-sync.yml config file, relative to XRAY_WORKING_DIR.
+    required: false
+    default: '.xray-sync.yml'
+
+  XRAY_WORKING_DIR:
+    description: >
+      Working directory for running tests and resolving the config file.
+      Defaults to the repo root.
+    required: false
+    default: '.'
