@@ -5,18 +5,18 @@
 # ─── Required ─────────────────────────────────────────────────────────────────
 
 # Your Jira project key
-project_key: DTV
+project_key: XTE
 
 # The Fix Version in Jira that test executions should be grouped under.
 # This version MUST already exist in your Jira project before the pipeline runs.
 # Create it at: Project Settings -> Versions -> Create version
-fix_version: v1.0
+fix_version: 0.1.0
 
 # ─── Test Runner ──────────────────────────────────────────────────────────────
 
 # The test reporter format your project uses.
 # Supported values: jest | mocha | pest | pytest
-reporter: jest
+reporter: pest
 
 # ─── Optional ─────────────────────────────────────────────────────────────────
 
@@ -31,4 +31,19 @@ execution_mode: per_run
 #   Mocha:  ./test-results.json   (--reporter-options output=)
 #   Pest:   ./test-results.xml    (--log-junit)
 #   Pytest: ./test-results.xml    (--junit-xml)
-test_results_path: ./test-results.json
+test_results_path: ./test-results.xml
+#   whole-file  -> one Xray Test per file, each test case becomes a step
+#   per-block   -> one Xray Test per test method/scenario, tagged individually
+#
+# If omitted, Claude Code falls back to per-file judgment (and will tell you
+# which mode it picked, so you can lock it in here afterward).
+xray_tagging_mode: whole-file
+# Which test types should never be synced to Jira/Xray, even if Xray tooling
+# is available. Test cases are classified in Step 2 as:
+#   unit         -> single function/module, all dependencies mocked
+#   integration  -> hits a real boundary: an API route, a database, or a UI interaction
+#
+# Anything listed here gets written and runs normally, it just never gets a
+# create_test call, an issue key, or an @xray_test tag. Leave empty/omit to
+# sync everything.
+xray_ignore_test_types: [unit]
