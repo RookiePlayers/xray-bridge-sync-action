@@ -41,14 +41,14 @@ jobs:
           { "name": "fixture", "private": true, "devDependencies": { "jest": "^29.0.0" } }
           EOF
           cat > fixture/sample.test.js <<'EOF'
-          // @xray_plan DTV-1
+          // @xray_plan XTE-1
           // @xray_folder /Smoke
           test('adds numbers', () => {
             expect(1 + 1).toBe(2);
           });
           EOF
           cat > fixture/.xray-sync.yml <<'EOF'
-          project_key: DTV
+          project_key: XTE
           fix_version: v1.0
           reporter: jest
           execution_mode: per_run
