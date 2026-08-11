@@ -66,4 +66,37 @@ describe('parseJUnitXmlOutput', () => {
       expect(result.parseWarnings).toEqual([expect.stringContaining('DTV-999')]);
     });
   });
+
+  describe('whole-file mode with [step:N] markers', () => {
+    const stepRaw = `<?xml version="1.0"?>
+<testsuites>
+  <testsuite name="Tests\\Feature\\TaxTest" tests="3" failures="1" skipped="1">
+    <testcase classname="Tests\\Feature\\TaxTest" name="[step:2] returns default for a missing rate" time="0.004">
+      <failure message="expected 0 got null"/>
+    </testcase>
+    <testcase classname="Tests\\Feature\\TaxTest" name="[step:1] resolves a valid tax rate" time="0.006"/>
+    <testcase classname="Tests\\Feature\\TaxTest" name="unmarked helper test" time="0.001">
+      <skipped/>
+    </testcase>
+  </testsuite>
+</testsuites>`;
+
+    it('emits ordered step results parsed from [step:N] markers, excluding unmarked tests', () => {
+      const result = parseJUnitXmlOutput(stepRaw);
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].passed).toBe(1);
+      expect(result.files[0].failed).toBe(1);
+      expect(result.files[0].skipped).toBe(1);
+      expect(result.files[0].steps).toEqual([
+        expect.objectContaining({ stepIndex: 1, status: 'PASSED', testTitle: 'resolves a valid tax rate', duration: 6 }),
+        expect.objectContaining({ stepIndex: 2, status: 'FAILED', testTitle: 'returns default for a missing rate', duration: 4 }),
+      ]);
+    });
+
+    it('omits the steps field entirely when no test has a marker', () => {
+      const result = parseJUnitXmlOutput(raw);
+      expect(result.files[0].steps).toBeUndefined();
+    });
+  });
 });

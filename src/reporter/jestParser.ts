@@ -5,6 +5,7 @@ import {
   XrayTestStatus,
   FileTags,
 } from '../types';
+import { buildStepResults, mapOutcomeToStepStatus } from './stepMarker';
 
 // ─── Jest JSON output types ───────────────────────────────────────────────────
 
@@ -102,6 +103,15 @@ function buildWholeFileEntry(
   const status: XrayTestStatus = failed > 0 ? 'FAILED' : 'PASSED';
   const duration = fileResult.endTime - fileResult.startTime;
 
+  const steps = buildStepResults(
+    assertionResults.map((t) => ({
+      title: t.title,
+      status: mapOutcomeToStepStatus(t.status),
+      duration: t.duration ?? 0,
+      failure: t.status === 'failed' ? buildFailure(t) : undefined,
+    }))
+  );
+
   return {
     filePath: fileResult.name,
     xrayPlan: tags.xrayPlan,
@@ -114,6 +124,7 @@ function buildWholeFileEntry(
     duration,
     status,
     failures,
+    steps: steps.length > 0 ? steps : undefined,
   };
 }
 

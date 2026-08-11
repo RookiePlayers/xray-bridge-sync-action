@@ -6,6 +6,7 @@ import {
   FileTags,
 } from '../types';
 import type { TestReporter } from './jestParser';
+import { buildStepResults, mapOutcomeToStepStatus, StepSource } from './stepMarker';
 
 // ─── Mocha JSON output types ──────────────────────────────────────────────────
 // Shape produced by: mocha --reporter json --reporter-options output=results.json
@@ -129,29 +130,38 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
     let skipped = 0;
     let totalDuration = 0;
     const failures: TestFailure[] = [];
+    const stepSources: StepSource[] = [];
 
     for (const test of tests) {
-      totalDuration += test.duration ?? 0;
+      const duration = test.duration ?? 0;
+      totalDuration += duration;
       const outcome = classify(test);
 
-      if (outcome === 'pending') {
-        skipped++;
-      } else if (outcome === 'failed') {
-        failed++;
-        failures.push({
+      const failure: TestFailure | undefined = outcome === 'failed'
+        ? {
           testName: test.fullTitle,
           message: (test.err?.message ?? '').split('\n')[0],
           // Mocha's err object doesn't separate expected/received the structured
           // way Jest's failureMessages do — the message above carries the info unstructured
           expected: undefined,
           received: undefined,
-        });
+        }
+        : undefined;
+
+      if (outcome === 'pending') {
+        skipped++;
+      } else if (outcome === 'failed') {
+        failed++;
+        failures.push(failure!);
       } else {
         passed++;
       }
+
+      stepSources.push({ title: test.title, status: mapOutcomeToStepStatus(outcome), duration, failure });
     }
 
     const status: XrayTestStatus = failed > 0 ? 'FAILED' : 'PASSED';
+    const steps = buildStepResults(stepSources);
 
     return [{
       filePath,
@@ -165,6 +175,7 @@ export function parseMochaOutput(raw: string, tagMap: Record<string, FileTags> =
       duration: totalDuration,
       status,
       failures,
+      steps: steps.length > 0 ? steps : undefined,
     }];
   });
 

@@ -112,4 +112,48 @@ describe('parseJestOutput', () => {
       ]);
     });
   });
+
+  describe('whole-file mode with [step:N] markers', () => {
+    const stepRaw = JSON.stringify({
+      startTime: 1700000000000,
+      numPassedTests: 1,
+      numFailedTests: 1,
+      numPendingTests: 1,
+      testResults: [
+        {
+          name: '/repo/src/tax.test.js',
+          startTime: 1700000000000,
+          endTime: 1700000000100,
+          status: 'failed',
+          assertionResults: [
+            { title: '[step:2] returns default for a missing rate', fullName: 'suite [step:2] returns default for a missing rate', status: 'failed', failureMessages: ['Expected: 0\nReceived: undefined'], duration: 4 },
+            { title: '[step:1] resolves a valid tax rate', fullName: 'suite [step:1] resolves a valid tax rate', status: 'passed', failureMessages: [], duration: 6 },
+            { title: 'unmarked helper test', fullName: 'suite unmarked helper test', status: 'pending', failureMessages: [] },
+          ],
+        },
+      ],
+    });
+
+    it('emits ordered step results parsed from [step:N] markers, excluding unmarked tests', () => {
+      const result = parseJestOutput(stepRaw, {
+        '/repo/src/tax.test.js': { xrayPlan: 'DTV-1', xrayTest: 'DTV-33' },
+      });
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].passed).toBe(1);
+      expect(result.files[0].failed).toBe(1);
+      expect(result.files[0].skipped).toBe(1);
+      expect(result.files[0].steps).toHaveLength(2);
+      expect(result.files[0].steps).toEqual([
+        expect.objectContaining({ stepIndex: 1, status: 'PASSED', testTitle: 'resolves a valid tax rate', duration: 6 }),
+        expect.objectContaining({ stepIndex: 2, status: 'FAILED', testTitle: 'returns default for a missing rate', duration: 4 }),
+      ]);
+      expect(result.files[0].steps?.[1].failure?.expected).toBe('0');
+    });
+
+    it('omits the steps field entirely when no test has a marker', () => {
+      const result = parseJestOutput(raw);
+      expect(result.files[0].steps).toBeUndefined();
+    });
+  });
 });

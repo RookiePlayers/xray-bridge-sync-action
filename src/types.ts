@@ -31,6 +31,19 @@ export interface TestFailure {
   received?: string;
 }
 
+/**
+ * One [step:N]-tagged test within a whole-file-mode Xray Test, mapping to a
+ * Step on that Test. Only produced for tests whose title carries the marker —
+ * see xray-test-generation.md for the convention.
+ */
+export interface StepResult {
+  stepIndex: number;
+  status: XrayTestStatus;
+  testTitle: string;
+  duration: number;
+  failure?: TestFailure;
+}
+
 export interface NormalisedTestFile {
   filePath: string;
   testTitle?: string;   // set when this entry represents one it()/test() block, not the whole file
@@ -44,6 +57,7 @@ export interface NormalisedTestFile {
   duration: number;
   status: XrayTestStatus;
   failures: TestFailure[];
+  steps?: StepResult[];  // whole-file mode only — per [step:N] marker, absent when no tests were marked
 }
 
 export interface NormalisedResult {

@@ -7,6 +7,7 @@ import {
   FileTags,
 } from '../types';
 import type { TestReporter } from './jestParser';
+import { buildStepResults, mapOutcomeToStepStatus, StepSource } from './stepMarker';
 
 // ─── JUnit XML types ──────────────────────────────────────────────────────────
 // Covers output from both Pest (--log-junit) and Pytest (--junit-xml).
@@ -170,21 +171,26 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
     let skipped = 0;
     let totalDuration = 0;
     const failures: TestFailure[] = [];
+    const stepSources: StepSource[] = [];
 
     for (const { testcase } of entries) {
       // JUnit time is in seconds; convert to milliseconds for consistency with
       // Jest/Mocha which both report in ms
-      totalDuration += parseFloat(testcase['@_time'] ?? '0') * 1000;
+      const duration = parseFloat(testcase['@_time'] ?? '0') * 1000;
+      totalDuration += duration;
       const outcome = classify(testcase);
+      const failure = outcome === 'failed' ? buildFailure(testcase) : undefined;
 
       if (outcome === 'skipped') {
         skipped++;
       } else if (outcome === 'failed') {
         failed++;
-        failures.push(buildFailure(testcase));
+        failures.push(failure!);
       } else {
         passed++;
       }
+
+      stepSources.push({ title: testcase['@_name'], status: mapOutcomeToStepStatus(outcome), duration, failure });
     }
 
     totalPassed += passed;
@@ -192,6 +198,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
     totalSkipped += skipped;
 
     const status: XrayTestStatus = failed > 0 ? 'FAILED' : 'PASSED';
+    const steps = buildStepResults(stepSources);
 
     return [{
       filePath: fileKey,
@@ -205,6 +212,7 @@ export function parseJUnitXmlOutput(raw: string, tagMap: Record<string, FileTags
       duration: totalDuration,
       status,
       failures,
+      steps: steps.length > 0 ? steps : undefined,
     }];
   });
 
