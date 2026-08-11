@@ -43,14 +43,19 @@ Read the feature code the user is asking you to test:
 Read `.xray-sync.yml` if it exists in the repo root. Extract `project_key` and `fix_version`.
 
 **Fix version:**
-- If `fix_version` is present in `.xray-sync.yml`, use it without asking
-- If it is missing or `.xray-sync.yml` does not exist, ask the user:
+- Always ask the user which fix version these tests should be linked to, even if `fix_version` is present in `.xray-sync.yml`:
+  > "What fix version should these tests be linked to? (`.xray-sync.yml` has `<fix_version>` — use that, or a different one?)"
+- If `.xray-sync.yml` does not exist or has no `fix_version`, ask without the config hint:
   > "What fix version should these tests be linked to? (e.g. v1.0)"
+- Use whatever the user confirms or provides — never proceed on the config value alone without asking.
 
 **Test Plan:**
 - Search the current conversation context for any previously mentioned Test Plan key (e.g. DTV-149)
-- If a Test Plan key is known, use it — do not ask again
-- If no Test Plan key is known, call `create_test_plan` to create one automatically:
+- If a Test Plan key is known, confirm it with the user before reusing it:
+  > "Should these tests go into the existing Test Plan DTV-149, or a different one?"
+- If no Test Plan key is known, ask the user for one before creating anything:
+  > "What Test Plan should these tests be linked to? Give me an existing key (e.g. DTV-149), or say 'create one' and I'll set up a new Test Plan named '{project_key} {fix_version} Test Plan'."
+- Only call `create_test_plan` if the user explicitly asks for a new one to be created. Never create a Test Plan automatically just because none was found in context.
   - `summary`: "{project_key} {fix_version} Test Plan" (e.g. "DTV v1.0 Test Plan")
   - `projectKey`: from `.xray-sync.yml` or ask the user
   - `fixVersion`: resolved above
@@ -212,9 +217,10 @@ Next steps:
 - Never write the test file without @xray_test — always create the Xray test case first
   so the real issue key is available to embed in the file header
 - Never confuse @xray_test (Test issue key) with @xray_plan (Test Plan key)
-- Never create a duplicate Test Plan — check whether one was already mentioned in
-  this session first
-- Never ask for fix_version if it is already in `.xray-sync.yml`
+- Never create a Test Plan automatically — always ask the user for a Test Plan key first,
+  and only create a new one if the user explicitly requests it
+- Always ask the user for the fix version, even when `.xray-sync.yml` has one — use the
+  config value as a suggestion, not an automatic answer
 - If the MCP tools are not available, write the test file with placeholder tags and
   tell the user to:
   1. Connect the Xray MCP connector at https://xray-sync-service-166488387568.europe-west2.run.app/account
