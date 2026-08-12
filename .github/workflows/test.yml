@@ -49,7 +49,7 @@ jobs:
           EOF
           cat > fixture/.xray-sync.yml <<'EOF'
           project_key: XTE
-          fix_version: v0.1.0
+          fix_version: 0.1.0
           reporter: jest
           execution_mode: per_run
           test_results_path: ./test-results.json

@@ -51,10 +51,39 @@ Read the feature code the user is asking you to test:
    - **`integration`** — exercises a real boundary: an API route (request → response), a
      database read/write, or a UI interaction/render. If a test hits an HTTP endpoint,
      queries/asserts against a database, or drives a UI, it's `integration`, not `unit`,
-     even if it also happens to live in the same file as unit tests.
+     even if it also happens to live in the same file as unit tests. Note which shape it
+     is (API, DB, or UI) — Step 5 writes the Xray action differently for each.
    This classification is used in Step 5 to decide which test cases get an Xray Test
    created — do not skip it even if Xray sync isn't being discussed yet.
-5. Do not write trivial tests that only check that a function exists or returns something non-null — every test case should verify meaningful behaviour
+5. **Writing UI integration tests.** When a test case is `integration`/UI, apply this
+   shape when writing the actual test code (this is about the code, not the Xray wording
+   — Step 5 covers how the Xray action reads):
+   - **Start from a realistic state.** Render the actual page or feature with routing,
+     state management, and other real integrations intact. Mock only boundaries you don't
+     control — usually the backend/network, payments, third-party SDKs.
+   - **Interact like a user.** Prefer `getByRole`, labels, and visible text; click buttons,
+     type into fields, navigate. Avoid selecting by CSS class, internal component name, or
+     `data-testid` unless there's genuinely no better option.
+   - **Assert the outcome, not the mechanics.** Don't test that `setState()` was called or
+     that a particular child component rendered. Test that the user sees "Saved
+     successfully," gets redirected, sees a validation error, or sees the updated value.
+   - **One meaningful workflow per test.** E.g. "Given an existing customer → when I edit
+     their email and save → then the correct API request is sent and the new email appears
+     in the UI." Don't bundle unrelated workflows into one test.
+   - **Include failure paths, not just the happy path.** Loading states, validation
+     errors, server errors, permission failures, empty states, and retries are usually the
+     highest-value UI integration tests — cover them as their own test cases in Step 2,
+     same as any other failure branch.
+   - **The refactor test:** if the internal component structure were refactored without
+     changing what the user experiences, the test should still pass. If a test would break
+     from a purely internal refactor, it's testing implementation, not behaviour — rewrite it.
+   - **Keep the test pyramid in mind** when deciding what becomes a UI integration test vs.
+     a unit test vs. an E2E test: unit tests should cover edge-case logic cheaply and in
+     volume; UI integration tests should cover a smaller number of important workflows
+     thoroughly; full E2E tests are reserved for only the most critical journeys. Don't
+     push edge-case logic coverage into UI integration tests just because the feature has a
+     UI — that belongs in unit tests on the underlying logic.
+6. Do not write trivial tests that only check that a function exists or returns something non-null — every test case should verify meaningful behaviour
 
 ---
 
@@ -209,6 +238,38 @@ side effect — this applies to both shapes:
 For a rejected/failed request, `*Response:*` is the status and validation error instead
 of a code block (e.g. `HTTP *422* validation error on {{<fieldA>}}`), and `*Database:*`
 states what was NOT created (e.g. `No rows are created.`).
+
+**UI integration test cases use the same two shapes, adapted to browser interactions
+instead of HTTP requests.** The full numbered walkthrough describes what a QA engineer
+clicks/types/sees, not the request:
+```
+As a user, I edit an existing <entity>'s <field> and save the change
+
+1. I navigate to the <entity> page
+2. I click "Edit" on the <field> field
+3. I clear the field and type "<new value>"
+4. I click "Save"
+```
+`data` lists the concrete starting state and the input typed, not a request payload:
+```
+*Starting state:* <entity> exists with *<field>*=<old value>
+*Input:* "<new value>" typed into the <field> field
+```
+`result` describes what the user sees, not internals — no "component re-rendered" or
+"state updated," only what's visible — followed by the same `*Database:*` side-effect
+section if the action persists anything:
+```
+*Response:*
+I see a "Saved successfully" confirmation, and the <field> value on the page updates to
+"<new value>" without a page reload.
+
+*Database:*
+- {{<table_name>}}: *<field>* updated to "<new value>" for the existing <entity>
+```
+For a UI failure case (validation error, permission failure, empty state), `*Response:*`
+states exactly what the user sees instead (e.g. `I see a "This field is required" error
+under the <field> input, and the form does not submit`), and `*Database:*` states nothing
+changed (e.g. `No rows are updated.`) — mirroring how a rejected API request is written.
 
 **Text formatting — apply throughout `action`/`data`/`result`, for every test type:**
 - **This project's Xray fields render Jira wiki markup, confirmed empirically** — NOT

@@ -31,7 +31,7 @@ execution_mode: per_run
 #   Mocha:  ./test-results.json   (--reporter-options output=)
 #   Pest:   ./test-results.xml    (--log-junit)
 #   Pytest: ./test-results.xml    (--junit-xml)
-test_results_path: ./test-results.xml
+test_results_path: ./test-results.json
 #   whole-file  -> one Xray Test per file, each test case becomes a step
 #   per-block   -> one Xray Test per test method/scenario, tagged individually
 #
