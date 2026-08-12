@@ -1,6 +1,8 @@
 # Xray Test Generation
 
-When asked to write tests for a feature, follow this process exactly.
+When asked to write tests for a feature, follow this process exactly. When asked to fix,
+update, reorder, or delete Xray Tests that already exist, skip to **Modifying existing
+tests** below instead.
 
 ---
 
@@ -52,8 +54,8 @@ Read the feature code the user is asking you to test:
      database read/write, or a UI interaction/render. If a test hits an HTTP endpoint,
      queries/asserts against a database, or drives a UI, it's `integration`, not `unit`,
      even if it also happens to live in the same file as unit tests. Note which shape it
-     is (API, DB, or UI) — Step 5 writes the Xray action differently for each.
-   This classification is used in Step 5 to decide which test cases get an Xray Test
+     is (API, DB, or UI) — Step 5 drafts the Xray action differently for each.
+   This classification is used in Step 6 to decide which test cases get an Xray Test
    created — do not skip it even if Xray sync isn't being discussed yet.
 5. **Writing UI integration tests.** When a test case is `integration`/UI, apply this
    shape when writing the actual test code (this is about the code, not the Xray wording
@@ -96,9 +98,10 @@ Read `.xray-sync.yml` if it exists in the repo root. Extract `project_key`, `fix
 - `xray_ignore_test_types` is a list containing zero or more of `unit`, `integration`
   (e.g. `xray_ignore_test_types: [unit]`).
 - Any test case classified in Step 2 as one of the listed types is excluded from Xray
-  entirely in Step 5 — no `create_test` call is made for it, no issue key exists for it,
-  and it gets no `@xray_test` tag in Step 6. It is still written into the test file and
-  still runs normally; it simply isn't represented in Jira/Xray at all.
+  entirely — no `create_test` call is ever made for it, no issue key exists for it, and
+  it gets no `@xray_test` tag in Step 7. It is still written into the test file and still
+  runs normally; it simply isn't represented in Jira/Xray at all. This filtering is
+  actually applied in Step 5, but the setting itself is read here.
 - If `xray_ignore_test_types` is absent or empty, every test case is eligible for Xray
   sync as before — nothing changes.
 - This is a config-only setting — never ask the user which types to ignore, and never
@@ -145,47 +148,76 @@ Read `.xray-sync.yml` if it exists in the repo root. Extract `project_key`, `fix
 
 ---
 
-## Step 5 — Create the Xray test case(s) FIRST, then write the test file
+## Step 5 — Draft the test plan and review it with the user
 
-Unlike the other steps, the Xray test case(s) must be created BEFORE writing the file
-so the returned issue key(s) can be embedded as `@xray_test` tag(s).
+Nothing touches Jira/Xray in this step — it's entirely about composing the plan and
+getting explicit sign-off before Step 6 makes any `create_test` calls. `update_test` can
+fix most mistakes after the fact (see **Modifying existing tests** below), but it's still
+cheaper to get the draft right upfront than to patch a multi-step Test one field at a time
+afterward — and `reorder_test_steps` refuses to run if any step has attachments or calls
+another test, so a wrong step order isn't always fixable in place. Confirm before
+anything is created.
 
-**First, apply `xray_ignore_test_types` from Step 3.** Split the test cases identified
-in Step 2 into two groups:
-- **Synced** — test cases whose type is NOT in `xray_ignore_test_types`. Only these
-  are eligible to get an Xray Test created below.
-- **Excluded** — test cases whose type IS in `xray_ignore_test_types`. These never get
-  a `create_test` call, never get an issue key, and never get an `@xray_test` tag. They
-  still get written into the file in Step 6 exactly like any other test — they just have
+**1. Apply `xray_ignore_test_types` from Step 3.** Split the test cases identified in
+Step 2 into two groups:
+- **Synced** — test cases whose type is NOT in `xray_ignore_test_types`. Only these are
+  eligible to get an Xray Test drafted below.
+- **Excluded** — test cases whose type IS in `xray_ignore_test_types`. These never get a
+  `create_test` call, never get an issue key, and never get an `@xray_test` tag. They
+  still get written into the file in Step 7 exactly like any other test — they just have
   no Xray involvement at all.
 
 If EVERY test case in the file falls into the excluded group (e.g. the whole file is
-`unit` tests and `xray_ignore_test_types` contains `unit`), skip the rest of this step
-and Step 5's Xray calls entirely — go straight to Step 6 and write the file with no
-`@xray_test`, `@xray_plan`, `@xray_folder`, or `@jira_parent` tags at all. This is the
-one case where the "never write without `@xray_test`" rule does not apply, because there
-is legitimately nothing to sync.
+`unit` tests and `xray_ignore_test_types` contains `unit`), there is nothing to draft or
+review for Xray — tell the user this file has no Xray-eligible test cases and skip ahead
+to Step 7 to write it with no `@xray_test`, `@xray_plan`, `@xray_folder`, or
+`@jira_parent` tags at all. This is the one case where the "never write without
+`@xray_test`" rule does not apply, because there is legitimately nothing to sync.
 
-Otherwise, continue below using only the **synced** group when deciding tagging mode and
-creating Xray Tests — the excluded group is not considered.
+Otherwise, continue below using only the **synced** group.
 
-**Action format for integration test cases.** When writing the `action`/`data`/`result`
-for a `steps` entry (whole-file mode) or a scenario's `steps` (per-block mode), test
-cases classified as `integration` in Step 2 must describe the manual reproduction of the
-scenario through the relevant tool (e.g. an HTTP client like Postman, for API tests), not
-the code. A QA engineer reading the Xray Test should be able to follow it by hand,
-without looking at the test file. `unit` test cases are unaffected by this and keep
+**2. Decide the tagging mode.**
+- **Config takes priority.** If `xray_tagging_mode` was found in `.xray-sync.yml` in
+  Step 3, use it directly — `whole-file` or `per-block` — and skip the judgment call
+  below entirely. Do not override a configured mode based on how the test cases look.
+- **No config value set — fall back to judgment:**
+  - **Whole-file mode (default)** — the test cases are variations of one behaviour and
+    read naturally as steps of a single manual Test (e.g. a function with 3 steps: valid
+    input, missing input, invalid input). Draft ONE Xray Test with multiple steps.
+  - **Per-block mode** — the test cases are independently meaningful scenarios a QA
+    engineer would want to track and report on separately in Xray (e.g. distinct API
+    behaviours, distinct endpoints, distinct business rules bundled in one file for
+    code-organisation reasons only). Draft one Xray Test PER scenario. Use this whenever
+    you're unsure which mode fits better — it gives finer-grained Xray reporting at no
+    extra cost.
+  - If judgment is used (no config value present), flag this to the user in the review
+    below and mention that setting `xray_tagging_mode` in `.xray-sync.yml` will make it
+    consistent going forward.
+
+**3. Draft each Xray Test's `summary`, `description`, and `steps` (action/data/result).**
+
+`description` always follows this three-part structure — never free-form prose, and
+never just a restatement of the steps:
+```
+*Purpose:* <one sentence — the behaviour/requirement this Test guarantees>
+*Scope:* <what's covered — which cases (valid/missing/invalid, success/failure/edge),
+unit vs integration, and which boundaries are real vs mocked>
+*Related:* <@jira_parent key if known, else "N/A">
+```
+
+**Action/data/result format for integration test cases.** Test cases classified as
+`integration` in Step 2 must describe the manual reproduction of the scenario through
+the relevant tool — an HTTP client (e.g. Postman) for API/DB tests, or the actual UI for
+UI tests — not the code. A QA engineer reading the Xray Test should be able to follow it
+by hand, without looking at the test file. `unit` test cases are unaffected and keep
 describing the function call as before.
 
 **This is the preferred, default format — use it unless the user explicitly asks for
-flowing-paragraph prose instead:**
+flowing-paragraph prose instead.** Every step is one of two shapes:
 
-Every step is one of two shapes:
-
-- **Full numbered walkthrough** — for the step that actually sends a request with a
-  meaningfully different setup (a new endpoint, a new payload shape). `action` is a
-  numbered, tool-level walkthrough a QA engineer can follow by hand, not a description of
-  the code:
+- **Full numbered walkthrough** — for the step that actually performs a meaningfully
+  different action (a new endpoint, a new payload shape, a new UI flow). For an API/DB
+  case, `action` is a numbered, tool-level walkthrough:
   ```
   As a developer, I created a new HTTP request to <do the primary action>
 
@@ -208,23 +240,35 @@ Every step is one of two shapes:
   *Pre-seeded:* {{<table_name>}} row for the relevant record: *<columnA>*=<value>,
   *<columnB>*=<value>
   ```
-- **Short one-liner** — for a variant/edge-case request that only differs from an earlier
-  full-walkthrough step in payload, auth, or headers, or for a step that only verifies
-  state from an earlier step (no new request). Reference the earlier step number instead
-  of re-describing the setup:
+  For a UI case, `action` describes clicks/typing/navigation instead of a request:
+  ```
+  As a user, I edit an existing <entity>'s <field> and save the change
+
+  1. I navigate to the <entity> page
+  2. I click "Edit" on the <field> field
+  3. I clear the field and type "<new value>"
+  4. I click "Save"
+  ```
+  Its `data` lists the concrete starting state and input typed, not a request payload:
+  ```
+  *Starting state:* <entity> exists with *<field>*=<old value>
+  *Input:* "<new value>" typed into the <field> field
+  ```
+- **Short one-liner** — for a variant/edge-case request or interaction that only differs
+  from an earlier full-walkthrough step in payload/auth/headers/input, or for a step that
+  only verifies state from an earlier step (no new request or interaction). Reference the
+  earlier step number instead of re-describing the setup:
   ```
   Trying to send the same request from step 1, but with an *invalid <fieldA>* value.
   ```
-  Its `data` states only the diff from that earlier step:
+  or, for UI:
   ```
-  Same as step 1, except:
-  {code:json}
-  { "<fieldA>": "<invalid value>" }
-  {code}
+  Same as step 1, but leaving the <field> field empty before clicking "Save".
   ```
+  Its `data` states only the diff from that earlier step.
 
-**`result`** always leads with the response, then a `*Database:*` section listing every
-side effect — this applies to both shapes:
+**`result`** always leads with the outcome, then a `*Database:*` section listing every
+side effect — this applies to both shapes and both API and UI cases:
 ```
 *Response:*
 {code:json}
@@ -235,29 +279,8 @@ side effect — this applies to both shapes:
 - {{<table_name>}}: new row (*<columnA>*=<value>, *<columnB>*=<value>)
 - {{<other_table_name>}}: new row (*<columnC>*=<value>, *<columnD>* set)
 ```
-For a rejected/failed request, `*Response:*` is the status and validation error instead
-of a code block (e.g. `HTTP *422* validation error on {{<fieldA>}}`), and `*Database:*`
-states what was NOT created (e.g. `No rows are created.`).
-
-**UI integration test cases use the same two shapes, adapted to browser interactions
-instead of HTTP requests.** The full numbered walkthrough describes what a QA engineer
-clicks/types/sees, not the request:
-```
-As a user, I edit an existing <entity>'s <field> and save the change
-
-1. I navigate to the <entity> page
-2. I click "Edit" on the <field> field
-3. I clear the field and type "<new value>"
-4. I click "Save"
-```
-`data` lists the concrete starting state and the input typed, not a request payload:
-```
-*Starting state:* <entity> exists with *<field>*=<old value>
-*Input:* "<new value>" typed into the <field> field
-```
-`result` describes what the user sees, not internals — no "component re-rendered" or
-"state updated," only what's visible — followed by the same `*Database:*` side-effect
-section if the action persists anything:
+For UI cases, `*Response:*` describes what the user sees, not internals — no "component
+re-rendered" or "state updated," only what's visible:
 ```
 *Response:*
 I see a "Saved successfully" confirmation, and the <field> value on the page updates to
@@ -266,12 +289,14 @@ I see a "Saved successfully" confirmation, and the <field> value on the page upd
 *Database:*
 - {{<table_name>}}: *<field>* updated to "<new value>" for the existing <entity>
 ```
-For a UI failure case (validation error, permission failure, empty state), `*Response:*`
-states exactly what the user sees instead (e.g. `I see a "This field is required" error
-under the <field> input, and the form does not submit`), and `*Database:*` states nothing
-changed (e.g. `No rows are updated.`) — mirroring how a rejected API request is written.
+For a rejected/failed request, `*Response:*` is the status and validation error instead
+of a code block (e.g. `HTTP *422* validation error on {{<fieldA>}}`). For a UI failure
+case, `*Response:*` states exactly what the user sees instead (e.g. `I see a "This field
+is required" error under the <field> input, and the form does not submit`). Either way,
+`*Database:*` states what was NOT created/changed (e.g. `No rows are created.`).
 
-**Text formatting — apply throughout `action`/`data`/`result`, for every test type:**
+**Text formatting — apply throughout `description`/`action`/`data`/`result`, for every
+test type:**
 - **This project's Xray fields render Jira wiki markup, confirmed empirically** — NOT
   standard Markdown, regardless of whether the base Jira looks like Cloud or Server:
   bold is single asterisks (`*text*`, not `**text**`), inline monospace is double curly
@@ -287,59 +312,54 @@ changed (e.g. `No rows are updated.`) — mirroring how a rejected API request i
   (`{{<fieldA>}}`, `{{<table_name>}}`, `{{apiUrl}}`).
 - `{code:json}...{code}` blocks for any JSON payload or response snippet — never inline
   JSON in a sentence and never a flat `key=value` list.
-- **Before recreating a multi-step Xray Test with any formatting syntax that hasn't been
+- **Before drafting a multi-step Xray Test with any formatting syntax that hasn't been
   confirmed to render correctly in THIS Jira instance**, create a tiny one-step throwaway
   probe Test first (summary prefixed `FORMAT PROBE`, skip `add_to_test_plan`/
-  `add_tests_to_folder` since it's disposable), covering one example of each syntax
-  element in use, and ask the user to screenshot how it rendered before committing to the
-  full Test. Recreating a full multi-step Test to fix formatting is expensive — no tool
-  exists to edit an already-created Test's steps (see the rule on this below) — so a
-  cheap 1-step probe is worth it whenever the syntax is unconfirmed for this Jira.
+  `add_tests_to_folder` since it's disposable, and `delete_test` it once you're done with
+  it), covering one example of each syntax element in use, and ask the user to screenshot
+  how it rendered before committing to the full plan. `update_test`'s `stepUpdates` can
+  patch formatting on individual steps afterward, but re-editing every step of a
+  multi-step Test one at a time is slower than getting the syntax right upfront — so a
+  cheap 1-step probe is still worth it whenever the syntax is unconfirmed for this Jira.
 
 Never fall back to describing the HTTP client call in code terms (e.g. "call the endpoint
 with axios") for an integration test case.
 
-Next decide which of the two tagging modes fits the feature (see Step 6 for full
-details on each mode's tag placement):
+**4. Present the drafted plan to the user and get explicit approval before Step 6.**
+Show, for each file to be created:
+- The file path(s) from Step 4, and which test cases go in which file
+- The tagging mode being used, and whether it came from config or judgment
+- For each Xray Test to be created: its `summary`, full `description`
+  (Purpose/Scope/Related), and each step's `action`/`data`/`result`
+- Which test cases (if any) are excluded from Xray per `xray_ignore_test_types`, and why
+- The Test Plan key and fix version this will be linked under (from Step 3)
 
-- **Config takes priority.** If `xray_tagging_mode` was found in `.xray-sync.yml` in
-  Step 3, use it directly — `whole-file` or `per-block` — and skip the judgment call
-  below entirely. Do not override a configured mode based on how the test cases look.
-- **No config value set — fall back to judgment:**
-  - **Whole-file mode (default)** — the test cases identified in Step 2 are variations
-    of one behaviour and read naturally as steps of a single manual Test (e.g. a function
-    with 3 steps: valid input, missing input, invalid input). Create ONE Xray Test with
-    multiple steps.
-  - **Per-block mode** — the test cases identified in Step 2 are independently meaningful
-    scenarios that a QA engineer would want to track and report on separately in Xray
-    (e.g. distinct API behaviours, distinct endpoints, distinct business rules bundled
-    in one file for code-organisation reasons only). Create one Xray Test PER scenario.
-    Use this whenever you're unsure which mode fits better — it gives finer-grained
-    Xray reporting at no extra cost.
-  - If judgment is used (no config value present), mention in Step 7's output which
-    mode was picked and that setting `xray_tagging_mode` in `.xray-sync.yml` will make
-    it consistent going forward.
+Ask directly: "Does this look right, or would you like changes before I create these in
+Jira/Xray?" Do not call `create_test`, `create_test_plan`, `create_folder`,
+`add_to_test_plan`, or `add_tests_to_folder` until the user gives explicit approval (e.g.
+"looks good," "proceed," "yes," or specific approved edits). If the user requests
+changes, revise the draft and present it again — repeat until approved. Only once
+approved does Step 6 begin.
+
+---
+
+## Step 6 — Create the Xray test case(s), then write the test file
+
+The Xray test case(s) must be created BEFORE writing the file so the returned issue
+key(s) can be embedded as `@xray_test` tag(s). This step only runs after the plan was
+approved in Step 5 — use the exact `summary`/`description`/`steps` content from that
+approved draft, don't redraft here.
 
 **Whole-file mode:**
 
-1. Call `create_test` with:
-   - `summary`: a clear title describing what this test file covers (e.g. "<Feature> — <behaviour> validation")
-   - `projectKey`: from `.xray-sync.yml` or ask the user
-   - `testType`: "Manual"
-   - `steps`: one step per **synced** test case (i.e. excluding anything filtered out by
-     `xray_ignore_test_types` above) using:
-     - `action`: what the test does (e.g. "Call `<function>` with a valid input")
-     - `data`: the input being used
-     - `result`: the expected outcome
-   - If the file mixes synced and excluded test cases (e.g. unit tests ignored,
-     integration tests synced), the resulting Xray Test only has steps for the synced
-     ones — the excluded test cases simply have no step and no `[step:N]` marker in
-     Step 6, same treatment as any other untagged test.
+1. Call `create_test` with the approved `summary`, `description`, `projectKey` (from
+   `.xray-sync.yml` or asked in Step 3), `testType: "Manual"`, and `steps` (one step per
+   **synced** test case, per the approved draft).
 
 2. Note the returned `issueKey` (e.g. PROJ-47) — this becomes the single `@xray_test` tag value
 
 3. Note the step order exactly as sent in `steps` (1-indexed, in array order). This
-   order is what step-level results will be matched against later — Step 6 embeds a
+   order is what step-level results will be matched against later — Step 7 embeds a
    `[step:N]` marker in each test title using this same numbering, so keep the mapping
    from "step N" to "which test case it was" until you write the file.
 
@@ -354,10 +374,11 @@ details on each mode's tag placement):
 
 **Per-block mode:**
 
-1. Call `create_test` once PER **synced** scenario (excluding anything filtered out by
-   `xray_ignore_test_types` above), each with its own `summary` (e.g. "<Feature> — scenario A", "<Feature> — scenario B"), `projectKey`, `testType: "Manual"`, and its own `steps` describing just that one scenario. Excluded scenarios are written into the file in Step 6 like any other test, just with no `@xray_test` tag above them.
+1. Call `create_test` once PER **synced** scenario, using the approved `summary`,
+   `description`, `projectKey`, `testType: "Manual"`, and `steps` for that scenario from
+   the approved draft.
 
-2. Note each returned `issueKey` (e.g. PROJ-150, PROJ-151) and which `it()`/`test()` block it corresponds to — you'll tag each block individually in Step 6.
+2. Note each returned `issueKey` (e.g. PROJ-150, PROJ-151) and which `it()`/`test()` block it corresponds to — you'll tag each block individually in Step 7.
 
 3. Call `add_to_test_plan` once with `testIssueIds` containing ALL the issueIds from step 1, so every Test lands in the same Test Plan.
 
@@ -365,19 +386,19 @@ details on each mode's tag placement):
 
 ---
 
-## Step 6 — Write the test file
+## Step 7 — Write the test file
 
 Create the test file in the correct location. `@xray_plan` / `@xray_folder` / `@jira_parent`
 always go at the very top of the file, before any imports — they apply to the whole file
 regardless of tagging mode. Where `@xray_test` goes depends on which mode you chose in Step 5:
 
 **Whole-file mode** — `@xray_test` also goes at the top, alongside the other tags. Each
-test title also gets a `[step:N]` marker matching the step order noted in Step 5, so the
+test title also gets a `[step:N]` marker matching the step order noted in Step 6, so the
 pipeline can report per-scenario results inside the one Test instead of a single blended
 pass/fail for the whole file:
 
 ```
-// @xray_test <issue-key-from-step-5>      ← REQUIRED — Xray Test issue key (e.g. PROJ-47)
+// @xray_test <issue-key-from-step-6>      ← REQUIRED — Xray Test issue key (e.g. PROJ-47)
 // @xray_plan <test-plan-key-from-step-3>  ← optional — Test Plan key (e.g. PROJ-149)
 // @xray_folder <folder-from-step-4>       ← optional — Xray folder path (e.g. /FeatureA/SubFeatureB)
 // @jira_parent <feature-issue-key>        ← optional — parent Jira story (e.g. PROJ-42)
@@ -390,7 +411,7 @@ describe('<feature> behaviour', () => {
 ```
 
 `[step:N]` must always be 1-indexed and match the order the steps were created in during
-Step 5 — the pipeline has no other way to know which test function corresponds to which
+Step 6 — the pipeline has no other way to know which test function corresponds to which
 step. If a test case from Step 2 doesn't map to any step (shouldn't happen, but if the
 file ends up with an extra test not represented in Xray), leave it untagged — an untagged
 test just doesn't report a step result, it doesn't break the others.
@@ -398,7 +419,7 @@ test just doesn't report a step result, it doesn't break the others.
 **Per-block mode** — `@xray_test` goes directly above EACH `it()`/`test()` call it applies to
 (no blank `it()`/`test()` call in between — blank lines and other comments are fine). Any
 `it()`/`test()` in the file with no `@xray_test` directly above it is simply not synced —
-only tag the blocks you created a Test for in Step 5:
+only tag the blocks you created a Test for in Step 6:
 
 ```
 // @xray_plan <test-plan-key-from-step-3>
@@ -440,7 +461,7 @@ Then write the full test file body, matching the conventions discovered in Step 
 
 ---
 
-## Step 7 — Tell the user what to do next
+## Step 8 — Tell the user what to do next
 
 ```
 Test file created: <path>
@@ -463,16 +484,141 @@ Next steps:
 
 ---
 
+## Modifying existing tests
+
+Use these tools when asked to fix, update, reorder, or remove Xray Tests that already
+exist — not while running Steps 1–8 above to generate new ones.
+
+**Finding tests — `search_tests`.** Use this when the user hasn't given an exact key —
+by JQL, project, Test Repository folder, and/or test type. Returns summary/key/testType/
+folder/step count for each match, not full step content (use `get_test` for that):
+```
+search_tests({ projectKey: "PROJ", folderPath: "/FeatureA", includeDescendantFolders: true })
+search_tests({ jql: "labels = sprint-42 AND issuetype = Test" })
+```
+Capped at 100 results by Xray — if a search legitimately exceeds that, narrow it (by
+folder, testType, or JQL) instead of trying to raise the limit further. Confirm matches
+with the user before acting on them if the search was broad or the intent was ambiguous.
+
+**Looking up one test — `get_test`.** Always call this first when you need a step's id or
+its current position — never guess them:
+```
+get_test({ testIssueKey: "PROJ-47" })
+```
+Returns each step with:
+- `position` — 1-indexed, matches the step's current order in Xray right now
+- `id` — required for `update_test`'s `stepUpdates`/`removeStepIds`, and for choosing
+  `reorder_test_steps`'s `newOrder`
+- `action` / `data` / `result` — the step's current content
+- `safeToReorder` — `false` if the step has attachments or calls another test. If any
+  step on the Test is `false`, `reorder_test_steps` will refuse to run on it at all.
+
+**Updating a test — `update_test`.** Accepts a batch, one entry per Test. Only
+`testIssueKey` is required — include only the fields actually being changed:
+```
+update_test({
+  updates: [{
+    testIssueKey: "PROJ-47",
+    summary: "...",                                               // Jira fields
+    description: "...",
+    parentKey: "PROJ-42",
+    assignee: "jane@company.com",
+    sprintId: 123,
+    testType: "Manual",                                           // Xray fields
+    folderPath: "/FeatureA/SubFeatureB",
+    linkedIssues: [{ issueKey: "PROJ-99", linkType: "Relates" }],
+    stepUpdates: [{ stepId: "<from get_test>", result: "..." }],   // edit step content
+    addSteps: [{ action: "...", result: "..." }],                 // append new steps
+    removeStepIds: ["<from get_test>"],                            // delete steps
+  }],
+})
+```
+This never reorders steps — use `reorder_test_steps` for that. Each sub-operation
+(assignee lookup, sprint lookup, each link, each step edit) fails independently and shows
+up in the response's `warnings` array rather than failing the whole update — check
+`warnings` even when `status` is `"updated"`.
+
+**Reordering steps — `reorder_test_steps`.** Xray has no native "move step" mutation, so
+this deletes all of a Test's steps and recreates them in the new order — which is why it
+refuses outright if any step has attachments or calls another test, rather than silently
+dropping that data. Always call `get_test` first and check `safeToReorder` on every step:
+```
+reorder_test_steps({
+  testIssueKey: "PROJ-47",
+  newOrder: [3, 1, 2],   // 1-indexed positions from the CURRENT order — a permutation of 1..N
+})
+```
+
+**Deleting a test — `delete_test`.** Permanent. Cannot be undone:
+```
+delete_test({ testIssueKeys: ["PROJ-47"] })
+```
+Always confirm the exact key(s) with the user before calling this — never delete a Test
+speculatively, as a side effect of another request, or without the user naming the key.
+The one standing exception is a disposable `FORMAT PROBE` Test created for Step 5's
+formatting check above — delete it once it's served its purpose.
+
+---
+
+## Implementing existing Jira Tests as code
+
+Sometimes a Test is defined in Jira FIRST — a QA engineer or PM wrote manual steps in
+Xray before any code existed — and you're asked to write the automated test that
+implements it. This is the reverse of Steps 1–8 above: the Xray Test(s) already exist, so
+you never call `create_test` here.
+
+1. **Find the Test(s).** If given exact key(s) already, skip to step 2. Otherwise use
+   `search_tests` (by project/folder/testType/JQL) and confirm the matches with the user
+   before proceeding — don't guess which Test they mean from a partial description.
+
+2. **Retrieve full detail with `get_test`** for each Test — its `summary`, `steps`
+   (`action`/`data`/`result`, in `position` order), and `folderPath`.
+
+3. **Still do Step 1 above** (read existing test files for this repo's framework and
+   conventions) — a Test coming from Jira instead of being drafted from code doesn't
+   change what the code itself needs to look like.
+
+4. **Translate each step's manual/QA-oriented `action`/`data`/`result` into real code.**
+   Steps written for manual QA describe tool-level actions ("I open the HTTP client...",
+   "I click Edit on the field...") — translate these into the equivalent code for this
+   repo's stack (e.g. a `supertest`/`axios` call for an HTTP-client step, a
+   render-and-click sequence for a UI step). This is Step 5's action/data/result
+   translation in reverse. Read the actual feature code (same as Step 2) to get inputs and
+   assertions right — the Jira step describes the intended behaviour, not the
+   implementation, and manual-QA wording is not a spec to transcribe literally.
+
+5. **Decide file/test layout from how many Tests you retrieved** — the tagging-mode
+   decision from Step 5 is already made by Jira's existing structure, not up to judgment:
+   - **One Test with multiple steps** → one file, one code test per step, each titled with
+     a `[step:N]` marker matching that step's `position` from `get_test` (whole-file mode).
+   - **Multiple Tests** → tag each corresponding block with its own `@xray_test` key
+     (per-block mode), same as Step 7.
+
+6. **Write the file per Step 7's tagging rules**, using the retrieved `folderPath` for
+   `@xray_folder` and the exact existing key(s) for `@xray_test`. `get_test` doesn't
+   return a Test Plan or parent story, so ask for `@xray_plan`/`@jira_parent` the same way
+   Step 3/Step 7 would if the user wants them.
+
+7. **Tell the user what was created**, same shape as Step 8, but note explicitly that no
+   new Jira issue was created — only the code file and its tags.
+
+---
+
 ## Important rules
 
-- No tool exists to edit or delete an already-created Xray Test's steps — only
-  `create_test` (new issue), `add_to_test_plan`, `add_tests_to_folder`, and `create_folder`
-  are available. If a Test's steps need to change (wrong format, missing coverage,
-  wrong wording), the only option is to `create_test` again and repoint the file's
-  `@xray_test` tag to the new key — the old issue is left behind in Jira, orphaned but
-  not deleted. This makes getting the format/coverage right BEFORE calling `create_test`
-  worth the extra care — confirm ambiguous formatting choices (e.g. which markup syntax
-  the user's Jira renders) with the user first rather than guessing and recreating.
+- `get_test`, `update_test`, `delete_test`, and `reorder_test_steps` exist for fixing an
+  already-created Xray Test — see **Modifying existing tests** above. This doesn't replace
+  Step 5's review gate: `reorder_test_steps` refuses to run if any step has attachments or
+  calls another test, and patching many steps one at a time via `update_test` is slower
+  than getting the draft right upfront. Get the plan right before creating it; use these
+  tools to fix what slips through, not as a substitute for the review step.
+- Never call `create_test`, `create_test_plan`, `create_folder`, `add_to_test_plan`, or
+  `add_tests_to_folder` before the user has explicitly approved the drafted plan in
+  Step 5. A drafted plan the user hasn't confirmed is not authorization to proceed.
+- Never call `create_test` for a Test that already exists in Jira — check with
+  `search_tests`/`get_test` first if there's any doubt. A Test found via `search_tests` or
+  named directly by the user goes through **Implementing existing Jira Tests as code**
+  above, not the create flow.
 - Never skip Step 1 — always read existing tests before writing new ones
 - Tests must be thorough: every success path, every failure path, and every edge case
   actually present in the code's branches/validation must get its own test case — not a
@@ -483,6 +629,8 @@ Next steps:
 - Never write the test file without @xray_test — always create the Xray test case first
   so the real issue key is available to embed in the file header
 - Never confuse @xray_test (Test issue key) with @xray_plan (Test Plan key)
+- Every `create_test` call includes a `description` in the *Purpose:*/*Scope:*/*Related:*
+  format — never free-form prose, never blank, and never just a restatement of the steps.
 - Never override a configured `xray_tagging_mode` from `.xray-sync.yml` based on
   how the test cases look — config always wins over judgment
 - Never call `create_test` for a test case whose type is listed in
@@ -491,7 +639,7 @@ Next steps:
   @xray_test" rule below when every test case in a file is excluded: in that case the
   file is written with zero Xray tags, which is correct, not an error.
 - In whole-file mode, always add a `[step:N]` marker to each test title, numbered to
-  match the step order used when the Xray Test was created in Step 5 — this is what
+  match the step order used when the Xray Test was created in Step 6 — this is what
   lets the pipeline report per-scenario results instead of one blended status for the
   file (requires the pipeline's reporter/import logic to parse `[step:N]` and import it
   as a step result — confirm that's in place before relying on this for status accuracy)
@@ -503,8 +651,8 @@ Next steps:
   tell the user to:
   1. Connect the configured Xray MCP connector (see your `.xray-sync.yml` / project setup
      for the connection URL)
-  2. Then ask Claude Code to run Steps 5–6 again to create the Xray test case and
-     replace the placeholder tags with real issue keys
+  2. Then ask Claude Code to run Steps 5–7 again to draft, review, and create the Xray
+     test case, and replace the placeholder tags with real issue keys
 - If the user says "just write the tests" without Xray context, write the file first
   with placeholder tags and handle Xray setup afterward — never block test generation
   on Xray setup
