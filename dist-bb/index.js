@@ -32663,7 +32663,8 @@ const fs = __importStar(__nccwpck_require__(9896));
  */
 async function syncResults(xrayServiceUrl, config, rawResults, tagMap, commitShaOverride, // NEW — used by Bitbucket entry point
 branchOverride, // NEW
-runUrlOverride // NEW
+runUrlOverride, // NEW
+credentials // NEW — explicit CI credentials, appended last to keep the Bitbucket entry point's positional call unaffected
 ) {
     const payload = {
         config,
@@ -32672,9 +32673,11 @@ runUrlOverride // NEW
         commitSha: commitShaOverride ?? process.env.GITHUB_SHA,
         branch: branchOverride ?? process.env.GITHUB_REF_NAME,
         runUrl: runUrlOverride ?? buildRunUrl(),
+        credentials,
     };
     core.info(`Syncing to Xray: project=${config.project_key}, version=${config.fix_version}, reporter=${config.reporter}`);
     core.info(`Tag map: ${Object.keys(tagMap).length} tagged file(s)`);
+    core.info(`Credentials: ${credentials ? 'forwarding xray_client_id/jira_* from action inputs' : 'none supplied — service will use its own env credentials'}`);
     const payloadPath = './xray-payload.json';
     fs.writeFileSync(payloadPath, JSON.stringify(payload));
     core.info(`Payload size: ${fs.statSync(payloadPath).size} bytes`);

@@ -1,3 +1,20 @@
+// ─── Explicit credentials (CI passthrough) ─────────────────────────────────────
+
+/**
+ * Explicit Xray/Jira credentials forwarded to xray-sync-service for callers
+ * with no session-based /connect/xray link — e.g. this action running in
+ * CI. Field names match the per-user XrayCredentials record the service
+ * already stores (see xray-sync-service's src/mcp/db/ixrayCredentials.ts),
+ * so the payload built here needs no translation on the service side.
+ */
+export interface XrayCredentialsInput {
+  xray_client_id: string;
+  xray_client_secret: string;
+  jira_base_url: string;
+  jira_email: string;
+  jira_api_token: string;
+}
+
 // ─── Xray Test Run Statuses ───────────────────────────────────────────────────
 
 // Must match Xray Cloud's built-in Test Run status names exactly, since the

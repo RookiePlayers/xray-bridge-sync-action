@@ -44,6 +44,37 @@ jobs:
 Add `XRAY_SERVICE_URL` as a repository secret pointing at your deployed
 xray-sync-service instance.
 
+### Explicit credentials (no session-based Xray connection)
+
+xray-sync-service normally resolves the Xray/Jira credentials to use via a
+per-user session established at `/connect/xray`. CI runs have no such
+session, so without any credential inputs the service falls back to its own
+environment credentials — which may belong to a different Jira site/project
+than the one this repo's `.xray-sync.yml` targets, and fails with an opaque
+Xray error like `No project could be found with key 'DTV'`.
+
+To avoid that, pass the credentials explicitly as action inputs. They mirror
+the same fields you'd fill in at `/connect/xray`, so reuse the same values:
+
+```yaml
+      - uses: actions/checkout@v4
+      - uses: RookiePlayers/xray-sync-action@v1
+        with:
+          xray_service_url: ${{ secrets.XRAY_SERVICE_URL }}
+          xray_client_id: ${{ secrets.XRAY_CLIENT_ID }}
+          xray_client_secret: ${{ secrets.XRAY_CLIENT_SECRET }}
+          jira_base_url: ${{ secrets.JIRA_BASE_URL }}
+          jira_email: ${{ secrets.JIRA_EMAIL }}
+          jira_api_token: ${{ secrets.JIRA_API_TOKEN }}
+```
+
+These five are all-or-nothing — set all of them or none. The service
+validates that `jira_email`/`jira_api_token` can actually see the
+`project_key` from `.xray-sync.yml` on `jira_base_url` before calling Xray,
+so a copy-pasted secret from the wrong Jira site fails with a clear
+"these credentials don't have access to project X on site Y" error instead
+of Xray's raw "project not found".
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -52,6 +83,11 @@ xray-sync-service instance.
 | `reporter` | No | from `.xray-sync.yml` | `jest`, `mocha`, `pest`, or `pytest` |
 | `config_path` | No | `.xray-sync.yml` | Path to config file |
 | `working_directory` | No | `.` | Directory to run tests in |
+| `xray_client_id` | No | — | Xray Cloud API Client ID. See [Explicit credentials](#explicit-credentials-no-session-based-xray-connection) — required together with the four fields below, or omit all five to use the service's session/env-based resolution |
+| `xray_client_secret` | No | — | Xray Cloud API Client Secret, paired with `xray_client_id` |
+| `jira_base_url` | No | — | Jira site these credentials belong to, e.g. `https://yourcompany.atlassian.net` |
+| `jira_email` | No | — | Email of the Jira account associated with `jira_api_token` |
+| `jira_api_token` | No | — | Jira API token for `jira_email` |
 
 ## Outputs
 
@@ -102,7 +138,8 @@ Python/PHP files use `#` comments instead of `//`. See [instructions/tag_refs.md
 2. It scans the test files referenced in those results for `@xray_test` /
    `@xray_plan` / `@xray_folder` / `@jira_parent` tags.
 3. It posts the raw results plus the extracted tag map to
-   `${xray_service_url}/xray/sync-results`.
+   `${xray_service_url}/xray/sync-results` — including the `xray_client_id`/
+   `jira_*` inputs as `credentials` in the request body, if provided.
 4. The service creates or updates a Jira Test Execution and returns the
    execution key and overall status, which are set as action outputs and
    written to the job summary.
