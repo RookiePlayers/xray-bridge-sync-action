@@ -22,6 +22,32 @@ inputs:
     description: 'Working directory for running tests (defaults to repo root)'
     required: false
     default: '.'
+  xray_client_id:
+    description: >
+      Xray Cloud API Client ID. Optional — only needed when xray_service_url has
+      no session-based Xray connection for this caller (e.g. running in CI, where
+      there's no /connect/xray session). When set, jira_base_url, jira_email,
+      jira_api_token and xray_client_secret must all be set too; the service
+      otherwise falls back to its own environment credentials, which may belong
+      to the wrong Jira site for this repo.
+    required: false
+    default: ''
+  xray_client_secret:
+    description: 'Xray Cloud API Client Secret, paired with xray_client_id. Store as a repository or organization secret.'
+    required: false
+    default: ''
+  jira_base_url:
+    description: 'Base URL of the Jira site these credentials belong to, e.g. https://yourcompany.atlassian.net. Must be the same site xray_client_id is issued for.'
+    required: false
+    default: ''
+  jira_email:
+    description: 'Email address of the Jira account associated with jira_api_token.'
+    required: false
+    default: ''
+  jira_api_token:
+    description: 'Jira API token for jira_email. Used to verify project access before syncing and to link @jira_parent issues. Store as a repository or organization secret.'
+    required: false
+    default: ''
 
 outputs:
   execution_key:
