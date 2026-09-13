@@ -70,7 +70,25 @@ export async function syncResults(
     body: fs.readFileSync(payloadPath),
   });
 
-  const body = await response.json() as any;
+  // Read as text first — a non-JSON response (wrong URL, auth wall, proxy error
+  // page, or the service crashing on this payload with no catch-all error
+  // handler) must not surface as a bare "Unexpected token '<'" JSON parse
+  // error with no indication of what actually came back.
+  const rawBody = await response.text();
+  const contentType = response.headers.get('content-type') ?? 'unknown';
+
+  let body: any;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    throw new Error(
+      `Xray sync failed (${response.status} ${response.statusText}): service returned ` +
+      `non-JSON response (content-type: ${contentType}). This usually means ` +
+      `xray_service_url is wrong, the request hit an auth wall, or the service ` +
+      `threw an unhandled error processing this payload — check xray_service_url ` +
+      `and the service's own logs. First 500 chars of body:\n${rawBody.slice(0, 500)}`
+    );
+  }
 
   if (!response.ok) {
     throw new Error(
