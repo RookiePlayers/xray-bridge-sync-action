@@ -32482,6 +32482,12 @@ async function run() {
         const inputReporter = core.getInput('reporter');
         const configPath = core.getInput('config_path') || '.xray-sync.yml';
         const workingDir = core.getInput('working_directory') || '.';
+        // ─── Optional explicit Xray/Jira credentials (CI passthrough) ────────────
+        // xray_service_url normally resolves credentials via a session-based
+        // /connect/xray link, but CI has no session — without these inputs the
+        // service falls back to its own env credentials, which may point at the
+        // wrong Jira site/project for this repo. All five are all-or-nothing.
+        const credentials = readCredentialsInput();
         // ─── Read .xray-sync.yml (resolved relative to working_directory) ────────
         const resolvedConfigPath = path.resolve(workingDir, configPath);
         if (!fs.existsSync(resolvedConfigPath)) {
@@ -32527,7 +32533,10 @@ async function run() {
             reporter,
             execution_mode: executionMode,
         };
-        const result = await (0, sync_1.syncResults)(xrayServiceUrl, syncConfig, rawResults, tagMap);
+        const result = await (0, sync_1.syncResults)(xrayServiceUrl, syncConfig, rawResults, tagMap, undefined, // commitSha — default to GITHUB_SHA
+        undefined, // branch — default to GITHUB_REF_NAME
+        undefined, // runUrl — default, built from GITHUB_* env
+        credentials);
         // ─── Set outputs ──────────────────────────────────────────────────────────
         core.setOutput('execution_key', result.executionKey ?? 'unknown');
         core.setOutput('overall_status', result.overallStatus ?? 'unknown');
@@ -32550,6 +32559,34 @@ async function run() {
     catch (err) {
         core.setFailed(err instanceof Error ? err.message : String(err));
     }
+}
+// ─── Explicit credentials input ────────────────────────────────────────────────
+/**
+ * Reads the five optional xray_client_id/xray_client_secret/jira_base_url/
+ * jira_email/jira_api_token inputs. They're all-or-nothing: providing none
+ * of them means "let the service resolve credentials itself" (session or
+ * env fallback); providing some but not all is almost certainly a
+ * misconfigured workflow (e.g. a forgotten secret), so that fails loudly
+ * here rather than producing a confusing 400 from the service later.
+ */
+function readCredentialsInput() {
+    const fields = {
+        xray_client_id: core.getInput('xray_client_id'),
+        xray_client_secret: core.getInput('xray_client_secret'),
+        jira_base_url: core.getInput('jira_base_url'),
+        jira_email: core.getInput('jira_email'),
+        jira_api_token: core.getInput('jira_api_token'),
+    };
+    const provided = Object.entries(fields).filter(([, v]) => v !== '');
+    if (provided.length === 0)
+        return undefined;
+    const missing = Object.entries(fields)
+        .filter(([, v]) => v === '')
+        .map(([k]) => k);
+    if (missing.length > 0) {
+        throw new Error(`xray_client_id, xray_client_secret, jira_base_url, jira_email and jira_api_token must all be set together, or all left blank. Missing: ${missing.join(', ')}`);
+    }
+    return fields;
 }
 run();
 
@@ -32606,7 +32643,8 @@ const fs = __importStar(__nccwpck_require__(9896));
  */
 async function syncResults(xrayServiceUrl, config, rawResults, tagMap, commitShaOverride, // NEW — used by Bitbucket entry point
 branchOverride, // NEW
-runUrlOverride // NEW
+runUrlOverride, // NEW
+credentials // NEW — explicit CI credentials, appended last to keep the Bitbucket entry point's positional call unaffected
 ) {
     const payload = {
         config,
@@ -32615,9 +32653,11 @@ runUrlOverride // NEW
         commitSha: commitShaOverride ?? process.env.GITHUB_SHA,
         branch: branchOverride ?? process.env.GITHUB_REF_NAME,
         runUrl: runUrlOverride ?? buildRunUrl(),
+        credentials,
     };
     core.info(`Syncing to Xray: project=${config.project_key}, version=${config.fix_version}, reporter=${config.reporter}`);
     core.info(`Tag map: ${Object.keys(tagMap).length} tagged file(s)`);
+    core.info(`Credentials: ${credentials ? 'forwarding xray_client_id/jira_* from action inputs' : 'none supplied — service will use its own env credentials'}`);
     const payloadPath = './xray-payload.json';
     fs.writeFileSync(payloadPath, JSON.stringify(payload));
     core.info(`Payload size: ${fs.statSync(payloadPath).size} bytes`);
